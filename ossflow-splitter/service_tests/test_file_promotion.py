@@ -16,7 +16,7 @@ _SVC_ROOT = Path(__file__).resolve().parents[1]
 if str(_SVC_ROOT) not in sys.path:
     sys.path.insert(0, str(_SVC_ROOT))
 
-from bjj_service_kit import JobEvent, RunRequest  # noqa: E402
+from ossflow_service_kit import JobEvent, RunRequest  # noqa: E402
 
 
 def test_run_promotes_file_to_parent(tmp_path, monkeypatch):

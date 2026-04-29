@@ -21,8 +21,8 @@ import logging
 import sys
 from pathlib import Path
 
-from bjj_service_kit.db import init_db, session_scope
-from bjj_service_kit.db.models import Setting
+from ossflow_service_kit.db import init_db, session_scope
+from ossflow_service_kit.db.models import Setting
 
 log = logging.getLogger("migrate_json_to_db")
 

@@ -23,7 +23,7 @@ def env(tmp_path, monkeypatch):
     monkeypatch.setenv("BJJ_DB_PATH", str(db_path))
     monkeypatch.setenv("TELEGRAM_FETCHER_URL", "http://telegram-fetcher:8004")
 
-    from bjj_service_kit.db import engine as _eng, session as _sess
+    from ossflow_service_kit.db import engine as _eng, session as _sess
     _eng.reset_engine()
     _sess.reset_factory()
 

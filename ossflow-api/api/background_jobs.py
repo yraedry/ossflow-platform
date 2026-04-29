@@ -38,8 +38,8 @@ from fastapi import APIRouter, HTTPException
 
 from api.settings import CONFIG_DIR as _CONFIG_DIR
 
-from bjj_service_kit.db import init_db, session_scope
-from bjj_service_kit.db.models import BackgroundJob as BackgroundJobRow
+from ossflow_service_kit.db import init_db, session_scope
+from ossflow_service_kit.db.models import BackgroundJob as BackgroundJobRow
 
 log = logging.getLogger(__name__)
 

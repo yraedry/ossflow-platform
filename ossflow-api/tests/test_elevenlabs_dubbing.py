@@ -169,7 +169,7 @@ def test_client_download_raises_on_empty(fake_sdk):
 #
 # The orchestrator late-imports ``api.app`` via ``_job_host()`` to avoid
 # a circular import at module load. In unit tests we *don't* want to pull
-# in ``api.app`` either (it drags SQLAlchemy / bjj_service_kit, which is
+# in ``api.app`` either (it drags SQLAlchemy / ossflow_service_kit, which is
 # only installed inside the container). We fake the host registry with a
 # minimal stand-in that exposes the same three attributes the
 # orchestrator touches: ``_jobs``, ``_job_events``, ``_persist_job``,

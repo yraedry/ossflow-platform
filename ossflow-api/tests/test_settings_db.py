@@ -19,8 +19,8 @@ def env(tmp_path, monkeypatch):
     monkeypatch.setenv("BJJ_DB_PATH", str(db_path))
 
     # Reset engine cache so new DB path takes effect
-    from bjj_service_kit.db import engine as eng_mod
-    from bjj_service_kit.db import session as sess_mod
+    from ossflow_service_kit.db import engine as eng_mod
+    from ossflow_service_kit.db import session as sess_mod
     eng_mod.reset_engine()
     sess_mod.reset_factory()
 
@@ -78,7 +78,7 @@ def test_legacy_json_is_imported_and_backed_up(tmp_path, monkeypatch):
     monkeypatch.setenv("CONFIG_DIR", str(config_dir))
     monkeypatch.setenv("BJJ_DB_PATH", str(db_path))
 
-    from bjj_service_kit.db import engine as eng_mod, session as sess_mod
+    from ossflow_service_kit.db import engine as eng_mod, session as sess_mod
     eng_mod.reset_engine()
     sess_mod.reset_factory()
 

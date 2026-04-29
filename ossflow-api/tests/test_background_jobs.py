@@ -26,7 +26,7 @@ from api.background_jobs import (
 def registry(tmp_path, monkeypatch):
     """Fresh registry with isolated DB + tmp legacy history file."""
     monkeypatch.setenv("BJJ_DB_PATH", str(tmp_path / "bjj.db"))
-    from bjj_service_kit.db import engine as _eng, session as _sess
+    from ossflow_service_kit.db import engine as _eng, session as _sess
     _eng.reset_engine()
     _sess.reset_factory()
 
@@ -120,7 +120,7 @@ def test_list_all_with_type_filter(registry):
 
 def test_persistence_roundtrip(tmp_path, monkeypatch):
     monkeypatch.setenv("BJJ_DB_PATH", str(tmp_path / "bjj.db"))
-    from bjj_service_kit.db import engine as _eng, session as _sess
+    from ossflow_service_kit.db import engine as _eng, session as _sess
     _eng.reset_engine()
     _sess.reset_factory()
 
@@ -146,8 +146,8 @@ def test_persistence_roundtrip(tmp_path, monkeypatch):
 
 def test_orphan_running_job_marked_failed_on_load(tmp_path, monkeypatch):
     monkeypatch.setenv("BJJ_DB_PATH", str(tmp_path / "bjj.db"))
-    from bjj_service_kit.db import engine as _eng, session as _sess, init_db, session_scope
-    from bjj_service_kit.db.models import BackgroundJob as BGRow
+    from ossflow_service_kit.db import engine as _eng, session as _sess, init_db, session_scope
+    from ossflow_service_kit.db.models import BackgroundJob as BGRow
     _eng.reset_engine()
     _sess.reset_factory()
     init_db()

@@ -18,7 +18,7 @@ _PY_ROOT = Path(__file__).resolve().parents[2]
 if str(_PY_ROOT) not in sys.path:
     sys.path.insert(0, str(_PY_ROOT))
 
-from bjj_service_kit import BaseRunner, JobEvent, RunRequest, create_app  # noqa: E402
+from ossflow_service_kit import BaseRunner, JobEvent, RunRequest, create_app  # noqa: E402
 
 
 SERVICE_NAME = "chapter-splitter"

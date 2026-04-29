@@ -10,7 +10,7 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 import pytest_asyncio
 
-# Make bjj_service_kit importable.
+# Make ossflow_service_kit importable.
 _KIT_PARENT = Path(__file__).resolve().parent.parent.parent
 if str(_KIT_PARENT) not in sys.path:
     sys.path.insert(0, str(_KIT_PARENT))

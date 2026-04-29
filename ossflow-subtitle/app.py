@@ -15,7 +15,7 @@ _KIT_PARENT = Path(__file__).resolve().parent.parent
 if str(_KIT_PARENT) not in sys.path:
     sys.path.insert(0, str(_KIT_PARENT))
 
-from bjj_service_kit import JobEvent, RunRequest, create_app, emit_logs  # noqa: E402
+from ossflow_service_kit import JobEvent, RunRequest, create_app, emit_logs  # noqa: E402
 from fastapi import HTTPException  # noqa: E402
 from pydantic import BaseModel  # noqa: E402
 

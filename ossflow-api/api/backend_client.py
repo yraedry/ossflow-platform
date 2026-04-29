@@ -71,7 +71,7 @@ class BackendClient:
     ) -> AsyncIterator[NormalizedEvent]:
         """Stream SSE events from /events/{job_id}, yield NormalizedEvent.
 
-        Accepts both the bjj_service_kit contract (``{"type","data"}``)
+        Accepts both the ossflow_service_kit contract (``{"type","data"}``)
         and the legacy flat contract (``{"status","progress",...}``).
         Reconnects on transient disconnect up to ``max_reconnects`` times.
         Stops when a terminal (done/error) event arrives.

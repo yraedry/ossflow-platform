@@ -11,12 +11,12 @@ import sys
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-# Make bjj_service_kit importable when running from /app.
+# Make ossflow_service_kit importable when running from /app.
 _KIT_PARENT = Path(__file__).resolve().parent.parent
 if str(_KIT_PARENT) not in sys.path:
     sys.path.insert(0, str(_KIT_PARENT))
 
-from bjj_service_kit import create_app, JobEvent, RunRequest  # noqa: E402
+from ossflow_service_kit import create_app, JobEvent, RunRequest  # noqa: E402
 from fastapi import FastAPI, Request  # noqa: E402
 from fastapi.responses import JSONResponse  # noqa: E402
 

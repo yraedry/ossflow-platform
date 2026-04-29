@@ -1,6 +1,6 @@
 """Persistent settings for the BJJ Instructional Processor.
 
-Settings are stored in the unified SQLite DB (``bjj_service_kit.db``).
+Settings are stored in the unified SQLite DB (``ossflow_service_kit.db``).
 The DB path defaults to ``/data/db/bjj.db`` but can be overridden via
 ``BJJ_DB_PATH``. A legacy JSON file at ``CONFIG_DIR/settings.json`` is
 auto-imported on first run if present, then renamed to ``settings.json.bak``.
@@ -18,8 +18,8 @@ from typing import Any, Optional
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
 
-from bjj_service_kit.db import init_db, session_scope
-from bjj_service_kit.db.models import Setting
+from ossflow_service_kit.db import init_db, session_scope
+from ossflow_service_kit.db.models import Setting
 
 log = logging.getLogger(__name__)
 

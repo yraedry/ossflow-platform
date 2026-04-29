@@ -59,7 +59,7 @@ async def test_stream_parses_sse_events():
 
 @pytest.mark.asyncio
 @respx.mock
-async def test_stream_accepts_bjj_service_kit_contract():
+async def test_stream_accepts_ossflow_service_kit_contract():
     """Events shaped as {"type","data"} must be normalized and terminate."""
     client = BackendClient("http://splitter.test")
     sse_body = (

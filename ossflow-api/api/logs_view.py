@@ -1,7 +1,7 @@
 """Centralized logs viewer for BJJ processor services.
 
 Each backend (chapter-splitter/subtitle/dubbing) exposes a `/logs` endpoint
-backed by an in-memory ring buffer (bjj_service_kit). This aggregator forwards
+backed by an in-memory ring buffer (ossflow_service_kit). This aggregator forwards
 the request to the right backend over HTTP — no `docker` binary needed in the
 processor-api container.
 

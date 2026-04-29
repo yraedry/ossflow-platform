@@ -1,6 +1,6 @@
 """Normalize backend SSE events into a stable internal contract.
 
-Backends built on ``bjj_service_kit.events`` emit events shaped like::
+Backends built on ``ossflow_service_kit.events`` emit events shaped like::
 
     {"type": "log|progress|done|error", "data": {...}}
 
@@ -57,7 +57,7 @@ def normalize(raw: dict) -> NormalizedEvent:
         return NormalizedEvent(kind="unknown", status="", progress=None,
                                message=None, payload={})
 
-    # --- New bjj_service_kit contract: {"type": ..., "data": {...}} ---
+    # --- New ossflow_service_kit contract: {"type": ..., "data": {...}} ---
     if "type" in raw and "data" in raw and isinstance(raw["data"], dict):
         typ = str(raw.get("type", "")).lower()
         data = raw["data"]

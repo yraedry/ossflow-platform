@@ -201,7 +201,7 @@ async def _probe_backend_gpu(name: str, base_url: str) -> tuple[str, list[dict]]
 async def check_nvidia_smi() -> CheckResult:
     """El contenedor processor-api NO tiene GPU asignada. Prueba local primero;
     si no hay nvidia-smi, pregunta a cada backend GPU por su endpoint /gpu
-    (expuesto vía bjj_service_kit) y considera OK si alguno reporta GPUs.
+    (expuesto vía ossflow_service_kit) y considera OK si alguno reporta GPUs.
 
     Fix: usa el AsyncClient compartido y consulta los 3 backends en paralelo.
     """
