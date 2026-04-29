@@ -150,10 +150,12 @@ _SCHEMA_STATEMENTS: Sequence[str] = (
 
 
 def _resolve_db_path(path: Optional[str]) -> str:
-    # Unified DB: prefer BJJ_DB_PATH (shared with processor-api),
-    # fall back to legacy TG_CACHE_DB, then default.
+    # Unified DB: prefer OSSFLOW_DB_PATH (shared with processor-api),
+    # fall back to legacy BJJ_DB_PATH (durante el split de repos; se eliminará
+    # en una versión futura), luego TG_CACHE_DB, luego default.
     return (
         path
+        or os.environ.get("OSSFLOW_DB_PATH")
         or os.environ.get("BJJ_DB_PATH")
         or os.environ.get("TG_CACHE_DB")
         or DEFAULT_DB_PATH

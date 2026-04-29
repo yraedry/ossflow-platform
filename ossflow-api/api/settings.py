@@ -2,7 +2,8 @@
 
 Settings are stored in the unified SQLite DB (``ossflow_service_kit.db``).
 The DB path defaults to ``/data/db/bjj.db`` but can be overridden via
-``BJJ_DB_PATH``. A legacy JSON file at ``CONFIG_DIR/settings.json`` is
+``OSSFLOW_DB_PATH`` (con fallback a ``BJJ_DB_PATH`` durante la transición
+del split de repos). A legacy JSON file at ``CONFIG_DIR/settings.json`` is
 auto-imported on first run if present, then renamed to ``settings.json.bak``.
 """
 
