@@ -1,0 +1,14 @@
+[project]
+name = "subtitle-generator"
+version = "1.0.0"
+description = "Generacion de subtitulos con WhisperX y filtrado anti-alucinaciones"
+requires-python = ">=3.10"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = "test_*.py"
+addopts = "-v --tb=short"
+markers = [
+    "requires_ollama: requiere servicio Ollama corriendo en localhost:11434",
+    "quality: test de calidad sobre golden set BJJ",
+]

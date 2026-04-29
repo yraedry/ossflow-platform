@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BJJ Procesador de Instruccionales</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+    <div class="app">
+        <!-- Header -->
+        <header>
+            <h1><span>BJJ</span> Procesador de Instruccionales</h1>
+            <div class="header-stats">
+                <div>Instruccionales: <span class="stat-value" id="stat-instructionals">0</span></div>
+                <div>Videos: <span class="stat-value" id="stat-videos">0</span></div>
+                <div>Subtitulados: <span class="stat-value" id="stat-subtitled">0</span></div>
+                <div>Doblados: <span class="stat-value" id="stat-dubbed">0</span></div>
+            </div>
+        </header>
+
+        <!-- Barra de ruta + boton popup -->
+        <div class="path-bar">
+            <input
+                type="text"
+                id="path-input"
+                placeholder="Z:\instruccionales\Arm Drags - John Danaher"
+                spellcheck="false"
+                autocomplete="off"
+            >
+            <button class="btn btn-secondary" id="browse-btn" title="Seleccionar ruta">&#128193;</button>
+            <button class="btn btn-primary" id="scan-btn">Escanear Biblioteca</button>
+        </div>
+
+        <!-- Library Grid -->
+        <div class="grid" id="library-grid">
+            <div class="empty-state" style="grid-column: 1 / -1;">
+                <div class="icon">&#127909;</div>
+                <h3>Introduce la ruta de tu biblioteca</h3>
+                <p>Indica la carpeta donde tienes tus instruccionales de BJJ y pulsa "Escanear Biblioteca" para ver todo el contenido disponible y su estado de procesamiento.</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Overlay -->
+    <div class="overlay" id="overlay"></div>
+
+    <!-- Panel de detalle (slide-in) -->
+    <div class="detail-panel" id="detail-panel">
+        <div class="panel-header">
+            <h2 id="panel-title">Detalle del Video</h2>
+            <button class="panel-close" id="panel-close">&times;</button>
+        </div>
+        <div class="panel-body" id="panel-body">
+            <!-- Rellenado dinamicamente -->
+        </div>
+    </div>
+
+    <!-- Modal para seleccionar ruta -->
+    <div class="modal-overlay" id="path-modal" style="display:none;">
+        <div class="modal-card">
+            <div class="modal-header">
+                <h3>Seleccionar Ruta</h3>
+                <button class="panel-close" id="modal-close">&times;</button>
+            </div>
+            <div class="modal-body">
+                <p style="color:var(--text-secondary); font-size:0.85rem; margin-bottom:14px;">
+                    Introduce o pega la ruta completa donde se encuentran tus instruccionales de BJJ.
+                </p>
+                <input
+                    type="text"
+                    id="modal-path-input"
+                    placeholder="Ej: Z:\instruccionales"
+                    spellcheck="false"
+                    autocomplete="off"
+                    style="width:100%; padding:12px 16px; background:var(--bg-input); border:1px solid var(--border); border-radius:var(--radius-md); color:var(--text-primary); font-family:var(--font-mono); font-size:0.88rem;"
+                >
+                <div style="margin-top:10px; display:flex; flex-direction:column; gap:6px;">
+                    <p style="color:var(--text-muted); font-size:0.78rem;">Rutas recientes:</p>
+                    <div id="recent-paths" style="display:flex; flex-direction:column; gap:4px;"></div>
+                </div>
+                <div style="margin-top:16px; display:flex; justify-content:flex-end; gap:8px;">
+                    <button class="btn btn-secondary" id="modal-cancel">Cancelar</button>
+                    <button class="btn btn-primary" id="modal-confirm">Seleccionar</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="/static/js/app.js"></script>
+</body>
+</html>

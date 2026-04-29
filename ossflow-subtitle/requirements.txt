@@ -1,0 +1,8 @@
+# Specific deps only. torch, fastapi, uvicorn, sse-starlette, pydantic, httpx,
+# numpy, pydub, transformers, sentencepiece already in bjj-base.
+whisperx
+noisereduce
+
+# Test-only
+pytest>=7.4
+pytest-asyncio>=0.23

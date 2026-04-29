@@ -1,0 +1,13 @@
+[project]
+name = "dubbing-generator"
+version = "1.0.0"
+description = "Doblaje al castellano con Coqui XTTS v2 y clonacion de voz"
+requires-python = ">=3.10"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = "test_*.py"
+addopts = "-v --tb=short"
+markers = [
+    "gpu: requires CUDA",
+]

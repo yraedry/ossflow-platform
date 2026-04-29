@@ -1,0 +1,446 @@
+- generic [ref=e2]:
+  - generic [ref=e3]:
+    - complementary [ref=e4]:
+      - generic [ref=e5]:
+        - generic [ref=e7]: B
+        - generic [ref=e8]:
+          - generic [ref=e9]: BJJ Processor
+          - generic [ref=e10]: v3.0.0
+      - navigation [ref=e11]:
+        - link "Dashboard" [ref=e13] [cursor=pointer]:
+          - /url: /
+          - img [ref=e14]
+          - generic [ref=e17]: Dashboard
+        - link "Biblioteca" [ref=e19] [cursor=pointer]:
+          - /url: /library
+          - img [ref=e20]
+          - generic [ref=e22]: Biblioteca
+        - link "Pipelines" [ref=e24] [cursor=pointer]:
+          - /url: /pipelines
+          - img [ref=e25]
+          - generic [ref=e29]: Pipelines
+        - link "Búsqueda" [ref=e31] [cursor=pointer]:
+          - /url: /search
+          - img [ref=e32]
+          - generic [ref=e35]: Búsqueda
+        - link "Logs" [ref=e37] [cursor=pointer]:
+          - /url: /logs
+          - img [ref=e38]
+          - generic [ref=e41]: Logs
+        - link "Voces" [ref=e43] [cursor=pointer]:
+          - /url: /voices
+          - img [ref=e44]
+          - generic [ref=e47]: Voces
+        - link "Telegram" [ref=e49] [cursor=pointer]:
+          - /url: /telegram
+          - img [ref=e50]
+          - generic [ref=e53]: Telegram
+        - link "Settings" [ref=e55] [cursor=pointer]:
+          - /url: /settings
+          - img [ref=e56]
+          - generic [ref=e59]: Settings
+      - button "Colapsar sidebar" [ref=e61]:
+        - generic [ref=e62]: collapse
+        - img [ref=e63]
+    - generic [ref=e65]:
+      - banner [ref=e66]:
+        - navigation "Breadcrumb" [ref=e68]:
+          - link "Panel" [ref=e70] [cursor=pointer]:
+            - /url: /
+          - generic [ref=e71]:
+            - img [ref=e72]
+            - link "Biblioteca" [ref=e704] [cursor=pointer]:
+              - /url: /library
+          - generic [ref=e705]:
+            - img [ref=e706]
+            - generic [ref=e708]: Anaconda - John Danaher
+        - generic [ref=e75]:
+          - button "Abrir command palette" [ref=e76]:
+            - img
+            - generic [ref=e77]: Buscar
+            - generic [ref=e78]:
+              - generic [ref=e79]: ⌘
+              - text: K
+          - button "Backends" [ref=e214]:
+            - generic [ref=e85]: Backends
+          - button "Cambiar tema" [ref=e86]:
+            - img
+            - img
+      - main [ref=e87]:
+        - generic [ref=e709]:
+          - navigation [ref=e710]:
+            - link "Biblioteca" [ref=e711] [cursor=pointer]:
+              - /url: /library
+            - generic [ref=e712]: /
+            - generic [ref=e713]: Anaconda - John Danaher
+          - generic [ref=e717]:
+            - generic [ref=e718]:
+              - img "Anaconda - John Danaher" [ref=e720]
+              - button "Cambiar póster" [ref=e721]:
+                - img
+                - text: Cambiar póster
+              - button "Re-descargar de Oracle" [ref=e722]:
+                - img
+                - text: Re-descargar de Oracle
+            - generic [ref=e723]:
+              - heading "Anaconda - John Danaher" [level=1] [ref=e724]
+              - paragraph [ref=e725]: /media/instruccionales/Anaconda - John Danaher
+              - generic [ref=e726]:
+                - generic [ref=e727]: 8 vídeos
+                - generic [ref=e728]: ·
+                - generic [ref=e729]: 1 temporada
+              - generic [ref=e730]:
+                - generic [ref=e731]:
+                  - img [ref=e732]
+                  - text: Capítulos
+                - generic [ref=e738]:
+                  - img [ref=e739]
+                  - text: Subtítulos
+                - generic [ref=e742]:
+                  - img [ref=e743]
+                  - text: Doblaje
+              - generic [ref=e746]:
+                - generic [ref=e747]:
+                  - button "Procesar" [ref=e748]:
+                    - img
+                    - text: Procesar
+                  - button "Elegir pasos del pipeline" [ref=e749]:
+                    - img
+                - button "Oracle" [ref=e750]:
+                  - img
+                  - text: Oracle
+                - button "Editar metadatos" [ref=e751]:
+                  - img
+                  - text: Editar metadatos
+          - generic [ref=e752]:
+            - tablist [ref=e753]:
+              - tab "Capítulos" [selected] [ref=e754]
+              - tab "QA doblaje" [ref=e755]
+              - tab "Metadatos" [ref=e756]
+              - tab "Oracle" [ref=e757]
+            - tabpanel "Capítulos" [ref=e758]:
+              - generic [ref=e760]:
+                - heading "Sin temporada 8 caps Trocear (oráculo)" [level=3] [ref=e761]:
+                  - button "Sin temporada 8 caps Trocear (oráculo)" [expanded] [ref=e762]:
+                    - generic [ref=e763]:
+                      - generic [ref=e764]: Sin temporada
+                      - generic [ref=e765]: 8 caps
+                      - button "Trocear (oráculo)" [ref=e767]:
+                        - img
+                        - text: Trocear (oráculo)
+                    - img [ref=e768]
+                - region "Sin temporada 8 caps Trocear (oráculo)" [ref=e770]:
+                  - table [ref=e773]:
+                    - rowgroup [ref=e774]:
+                      - row "Código Título Duración Estado Acción" [ref=e775]:
+                        - columnheader "Código" [ref=e776]
+                        - columnheader "Título" [ref=e777]
+                        - columnheader "Duración" [ref=e778]
+                        - columnheader "Estado" [ref=e779]
+                        - columnheader "Acción" [ref=e780]
+                    - rowgroup [ref=e781]:
+                      - row "— The anaconda strangle John Danaher 1.mp4 Renombrar — Ver Validar Debug Dub dbg Traducir Procesar" [ref=e782]:
+                        - cell "—" [ref=e783]
+                        - cell "The anaconda strangle John Danaher 1.mp4 Renombrar" [ref=e784]:
+                          - generic [ref=e785]:
+                            - generic "The anaconda strangle John Danaher 1.mp4" [ref=e786]
+                            - button "Renombrar" [ref=e787]:
+                              - img [ref=e788]
+                        - cell "—" [ref=e791]
+                        - cell [ref=e792]:
+                          - generic [ref=e793]:
+                            - button "Trocear en capítulos" [ref=e794]:
+                              - img [ref=e795]
+                            - generic "Subs EN" [ref=e801]:
+                              - img [ref=e802]
+                            - generic "Subs ES" [ref=e805]:
+                              - img [ref=e806]
+                            - generic "Doblaje ES" [ref=e810]:
+                              - img [ref=e811]
+                        - cell "Ver Validar Debug Dub dbg Traducir Procesar" [ref=e814]:
+                          - generic [ref=e815]:
+                            - button "Ver" [ref=e816]:
+                              - img
+                              - text: Ver
+                            - button "Validar" [disabled]:
+                              - img
+                              - text: Validar
+                            - button "Debug" [ref=e817]:
+                              - img
+                              - text: Debug
+                            - button "Dub dbg" [ref=e818]:
+                              - img
+                              - text: Dub dbg
+                            - button "Traducir" [disabled]:
+                              - img
+                              - text: Traducir
+                            - button "Procesar" [ref=e819]:
+                              - img
+                              - text: Procesar
+                      - row "— The anaconda strangle John Danaher 2.mp4 Renombrar — Ver Validar Debug Dub dbg Traducir Procesar" [ref=e820]:
+                        - cell "—" [ref=e821]
+                        - cell "The anaconda strangle John Danaher 2.mp4 Renombrar" [ref=e822]:
+                          - generic [ref=e823]:
+                            - generic "The anaconda strangle John Danaher 2.mp4" [ref=e824]
+                            - button "Renombrar" [ref=e825]:
+                              - img [ref=e826]
+                        - cell "—" [ref=e829]
+                        - cell [ref=e830]:
+                          - generic [ref=e831]:
+                            - button "Trocear en capítulos" [ref=e832]:
+                              - img [ref=e833]
+                            - generic "Subs EN" [ref=e839]:
+                              - img [ref=e840]
+                            - generic "Subs ES" [ref=e843]:
+                              - img [ref=e844]
+                            - generic "Doblaje ES" [ref=e848]:
+                              - img [ref=e849]
+                        - cell "Ver Validar Debug Dub dbg Traducir Procesar" [ref=e852]:
+                          - generic [ref=e853]:
+                            - button "Ver" [ref=e854]:
+                              - img
+                              - text: Ver
+                            - button "Validar" [disabled]:
+                              - img
+                              - text: Validar
+                            - button "Debug" [ref=e855]:
+                              - img
+                              - text: Debug
+                            - button "Dub dbg" [ref=e856]:
+                              - img
+                              - text: Dub dbg
+                            - button "Traducir" [disabled]:
+                              - img
+                              - text: Traducir
+                            - button "Procesar" [ref=e857]:
+                              - img
+                              - text: Procesar
+                      - row "— The anaconda strangle John Danaher 3.mp4 Renombrar — Ver Validar Debug Dub dbg Traducir Procesar" [ref=e858]:
+                        - cell "—" [ref=e859]
+                        - cell "The anaconda strangle John Danaher 3.mp4 Renombrar" [ref=e860]:
+                          - generic [ref=e861]:
+                            - generic "The anaconda strangle John Danaher 3.mp4" [ref=e862]
+                            - button "Renombrar" [ref=e863]:
+                              - img [ref=e864]
+                        - cell "—" [ref=e867]
+                        - cell [ref=e868]:
+                          - generic [ref=e869]:
+                            - button "Trocear en capítulos" [ref=e870]:
+                              - img [ref=e871]
+                            - generic "Subs EN" [ref=e877]:
+                              - img [ref=e878]
+                            - generic "Subs ES" [ref=e881]:
+                              - img [ref=e882]
+                            - generic "Doblaje ES" [ref=e886]:
+                              - img [ref=e887]
+                        - cell "Ver Validar Debug Dub dbg Traducir Procesar" [ref=e890]:
+                          - generic [ref=e891]:
+                            - button "Ver" [ref=e892]:
+                              - img
+                              - text: Ver
+                            - button "Validar" [disabled]:
+                              - img
+                              - text: Validar
+                            - button "Debug" [ref=e893]:
+                              - img
+                              - text: Debug
+                            - button "Dub dbg" [ref=e894]:
+                              - img
+                              - text: Dub dbg
+                            - button "Traducir" [disabled]:
+                              - img
+                              - text: Traducir
+                            - button "Procesar" [ref=e895]:
+                              - img
+                              - text: Procesar
+                      - row "— The anaconda strangle John Danaher 4.mp4 Renombrar — Ver Validar Debug Dub dbg Traducir Procesar" [ref=e896]:
+                        - cell "—" [ref=e897]
+                        - cell "The anaconda strangle John Danaher 4.mp4 Renombrar" [ref=e898]:
+                          - generic [ref=e899]:
+                            - generic "The anaconda strangle John Danaher 4.mp4" [ref=e900]
+                            - button "Renombrar" [ref=e901]:
+                              - img [ref=e902]
+                        - cell "—" [ref=e905]
+                        - cell [ref=e906]:
+                          - generic [ref=e907]:
+                            - button "Trocear en capítulos" [ref=e908]:
+                              - img [ref=e909]
+                            - generic "Subs EN" [ref=e915]:
+                              - img [ref=e916]
+                            - generic "Subs ES" [ref=e919]:
+                              - img [ref=e920]
+                            - generic "Doblaje ES" [ref=e924]:
+                              - img [ref=e925]
+                        - cell "Ver Validar Debug Dub dbg Traducir Procesar" [ref=e928]:
+                          - generic [ref=e929]:
+                            - button "Ver" [ref=e930]:
+                              - img
+                              - text: Ver
+                            - button "Validar" [disabled]:
+                              - img
+                              - text: Validar
+                            - button "Debug" [ref=e931]:
+                              - img
+                              - text: Debug
+                            - button "Dub dbg" [ref=e932]:
+                              - img
+                              - text: Dub dbg
+                            - button "Traducir" [disabled]:
+                              - img
+                              - text: Traducir
+                            - button "Procesar" [ref=e933]:
+                              - img
+                              - text: Procesar
+                      - row "— The anaconda strangle John Danaher 5.mp4 Renombrar — Ver Validar Debug Dub dbg Traducir Procesar" [ref=e934]:
+                        - cell "—" [ref=e935]
+                        - cell "The anaconda strangle John Danaher 5.mp4 Renombrar" [ref=e936]:
+                          - generic [ref=e937]:
+                            - generic "The anaconda strangle John Danaher 5.mp4" [ref=e938]
+                            - button "Renombrar" [ref=e939]:
+                              - img [ref=e940]
+                        - cell "—" [ref=e943]
+                        - cell [ref=e944]:
+                          - generic [ref=e945]:
+                            - button "Trocear en capítulos" [ref=e946]:
+                              - img [ref=e947]
+                            - generic "Subs EN" [ref=e953]:
+                              - img [ref=e954]
+                            - generic "Subs ES" [ref=e957]:
+                              - img [ref=e958]
+                            - generic "Doblaje ES" [ref=e962]:
+                              - img [ref=e963]
+                        - cell "Ver Validar Debug Dub dbg Traducir Procesar" [ref=e966]:
+                          - generic [ref=e967]:
+                            - button "Ver" [ref=e968]:
+                              - img
+                              - text: Ver
+                            - button "Validar" [disabled]:
+                              - img
+                              - text: Validar
+                            - button "Debug" [ref=e969]:
+                              - img
+                              - text: Debug
+                            - button "Dub dbg" [ref=e970]:
+                              - img
+                              - text: Dub dbg
+                            - button "Traducir" [disabled]:
+                              - img
+                              - text: Traducir
+                            - button "Procesar" [ref=e971]:
+                              - img
+                              - text: Procesar
+                      - row "— The anaconda strangle John Danaher 6.mp4 Renombrar — Ver Validar Debug Dub dbg Traducir Procesar" [ref=e972]:
+                        - cell "—" [ref=e973]
+                        - cell "The anaconda strangle John Danaher 6.mp4 Renombrar" [ref=e974]:
+                          - generic [ref=e975]:
+                            - generic "The anaconda strangle John Danaher 6.mp4" [ref=e976]
+                            - button "Renombrar" [ref=e977]:
+                              - img [ref=e978]
+                        - cell "—" [ref=e981]
+                        - cell [ref=e982]:
+                          - generic [ref=e983]:
+                            - button "Trocear en capítulos" [ref=e984]:
+                              - img [ref=e985]
+                            - generic "Subs EN" [ref=e991]:
+                              - img [ref=e992]
+                            - generic "Subs ES" [ref=e995]:
+                              - img [ref=e996]
+                            - generic "Doblaje ES" [ref=e1000]:
+                              - img [ref=e1001]
+                        - cell "Ver Validar Debug Dub dbg Traducir Procesar" [ref=e1004]:
+                          - generic [ref=e1005]:
+                            - button "Ver" [ref=e1006]:
+                              - img
+                              - text: Ver
+                            - button "Validar" [disabled]:
+                              - img
+                              - text: Validar
+                            - button "Debug" [ref=e1007]:
+                              - img
+                              - text: Debug
+                            - button "Dub dbg" [ref=e1008]:
+                              - img
+                              - text: Dub dbg
+                            - button "Traducir" [disabled]:
+                              - img
+                              - text: Traducir
+                            - button "Procesar" [ref=e1009]:
+                              - img
+                              - text: Procesar
+                      - row "— The anaconda strangle John Danaher 7.mp4 Renombrar — Ver Validar Debug Dub dbg Traducir Procesar" [ref=e1010]:
+                        - cell "—" [ref=e1011]
+                        - cell "The anaconda strangle John Danaher 7.mp4 Renombrar" [ref=e1012]:
+                          - generic [ref=e1013]:
+                            - generic "The anaconda strangle John Danaher 7.mp4" [ref=e1014]
+                            - button "Renombrar" [ref=e1015]:
+                              - img [ref=e1016]
+                        - cell "—" [ref=e1019]
+                        - cell [ref=e1020]:
+                          - generic [ref=e1021]:
+                            - button "Trocear en capítulos" [ref=e1022]:
+                              - img [ref=e1023]
+                            - generic "Subs EN" [ref=e1029]:
+                              - img [ref=e1030]
+                            - generic "Subs ES" [ref=e1033]:
+                              - img [ref=e1034]
+                            - generic "Doblaje ES" [ref=e1038]:
+                              - img [ref=e1039]
+                        - cell "Ver Validar Debug Dub dbg Traducir Procesar" [ref=e1042]:
+                          - generic [ref=e1043]:
+                            - button "Ver" [ref=e1044]:
+                              - img
+                              - text: Ver
+                            - button "Validar" [disabled]:
+                              - img
+                              - text: Validar
+                            - button "Debug" [ref=e1045]:
+                              - img
+                              - text: Debug
+                            - button "Dub dbg" [ref=e1046]:
+                              - img
+                              - text: Dub dbg
+                            - button "Traducir" [disabled]:
+                              - img
+                              - text: Traducir
+                            - button "Procesar" [ref=e1047]:
+                              - img
+                              - text: Procesar
+                      - row "— The anaconda strangle John Danaher 8.mp4 Renombrar — Ver Validar Debug Dub dbg Traducir Procesar" [ref=e1048]:
+                        - cell "—" [ref=e1049]
+                        - cell "The anaconda strangle John Danaher 8.mp4 Renombrar" [ref=e1050]:
+                          - generic [ref=e1051]:
+                            - generic "The anaconda strangle John Danaher 8.mp4" [ref=e1052]
+                            - button "Renombrar" [ref=e1053]:
+                              - img [ref=e1054]
+                        - cell "—" [ref=e1057]
+                        - cell [ref=e1058]:
+                          - generic [ref=e1059]:
+                            - button "Trocear en capítulos" [ref=e1060]:
+                              - img [ref=e1061]
+                            - generic "Subs EN" [ref=e1067]:
+                              - img [ref=e1068]
+                            - generic "Subs ES" [ref=e1071]:
+                              - img [ref=e1072]
+                            - generic "Doblaje ES" [ref=e1076]:
+                              - img [ref=e1077]
+                        - cell "Ver Validar Debug Dub dbg Traducir Procesar" [ref=e1080]:
+                          - generic [ref=e1081]:
+                            - button "Ver" [ref=e1082]:
+                              - img
+                              - text: Ver
+                            - button "Validar" [disabled]:
+                              - img
+                              - text: Validar
+                            - button "Debug" [ref=e1083]:
+                              - img
+                              - text: Debug
+                            - button "Dub dbg" [ref=e1084]:
+                              - img
+                              - text: Dub dbg
+                            - button "Traducir" [disabled]:
+                              - img
+                              - text: Traducir
+                            - button "Procesar" [ref=e1085]:
+                              - img
+                              - text: Procesar
+  - region "Notifications alt+T"

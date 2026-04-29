@@ -1,0 +1,23 @@
+# Dev override — cargado automáticamente por `docker compose`.
+# Monta el código de subtitle-generator desde el host y activa --reload.
+# El contenedor GPU ya tiene whisperx/torch instalados: no hay rebuild.
+#
+# Uso:
+#   docker compose restart subtitle-generator   (primera vez)
+#   # Después, cualquier cambio en subtitle-generator/ se recarga solo (<1s).
+#
+# Para producción (sin este override):
+#   docker compose -f docker-compose.yml up -d
+
+services:
+  subtitle-generator:
+    volumes:
+      - ./subtitle-generator:/app/subtitle-generator
+      - ./bjj_service_kit:/app/bjj_service_kit
+    command: >
+      uvicorn app:app
+        --host 0.0.0.0
+        --port 8002
+        --app-dir /app/subtitle-generator
+        --reload
+        --reload-dir /app/subtitle-generator
