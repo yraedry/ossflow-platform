@@ -4,7 +4,7 @@
 FROM python:3.10-slim
 
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends ca-certificates curl \
+    && apt-get install -y --no-install-recommends ca-certificates curl git \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
@@ -12,12 +12,12 @@ WORKDIR /app
 # Shared service kit first (small, stable) — provides app factory, /health, /logs.
 RUN pip install --no-cache-dir "ossflow-service-kit @ git+https://github.com/yraedry/ossflow-core@v0.1.0#subdirectory=ossflow_service_kit"
 
-# Python deps for telegram-fetcher.
-COPY telegram-fetcher/requirements.txt /tmp/requirements.txt
+# Python deps for ossflow-telegram.
+COPY ossflow-telegram/requirements.txt /tmp/requirements.txt
 RUN pip install --no-cache-dir -r /tmp/requirements.txt
 
 # Copy the telegram_fetcher package + entrypoints (app.py created by T3).
-COPY telegram-fetcher /app
+COPY ossflow-telegram /app
 
 # Runtime state: Telethon session + download cache.
 RUN mkdir -p /data/session /data/cache \

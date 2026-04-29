@@ -2,7 +2,7 @@
 FROM ossflow-base:latest
 
 # 1. Solo requirements.txt — esta layer solo se invalida si cambia requirements.txt
-COPY subtitle-generator/requirements.txt /app/requirements.txt
+COPY ossflow-subtitle/requirements.txt /app/requirements.txt
 RUN --mount=type=cache,target=/root/.cache/pip,id=ossflow-pip,sharing=locked \
     pip install -r /app/requirements.txt \
  && pip uninstall -y pytest pytest-asyncio || true \
@@ -16,8 +16,8 @@ RUN --mount=type=cache,target=/root/.cache/pip,id=ossflow-pip,sharing=locked \
 RUN pip install --no-cache-dir "ossflow-service-kit @ git+https://github.com/yraedry/ossflow-core@v0.1.0#subdirectory=ossflow_service_kit"
 
 # 3. Código del servicio — cambia frecuentemente, no invalida nada de arriba
-COPY subtitle-generator /app/subtitle-generator
-WORKDIR /app/subtitle-generator
+COPY ossflow-subtitle /app/ossflow-subtitle
+WORKDIR /app/ossflow-subtitle
 
 EXPOSE 8002
 HEALTHCHECK --interval=30s --timeout=5s --start-period=30s --retries=3 \

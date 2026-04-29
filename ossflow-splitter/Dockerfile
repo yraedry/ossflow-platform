@@ -6,7 +6,7 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     --mount=type=cache,target=/var/lib/apt,sharing=locked \
     apt-get update && apt-get install -y --no-install-recommends mkvtoolnix
 
-COPY chapter-splitter/requirements.txt /app/requirements.txt
+COPY ossflow-splitter/requirements.txt /app/requirements.txt
 
 RUN --mount=type=cache,target=/root/.cache/pip \
     pip install -r /app/requirements.txt \
@@ -18,8 +18,8 @@ RUN --mount=type=cache,target=/root/.cache/pip \
       \( -name "tests" -o -name "test" -o -name "docs" -o -name "examples" \) \
       -exec rm -rf {} + 2>/dev/null || true
 
-COPY chapter-splitter /app/chapter-splitter
-WORKDIR /app/chapter-splitter
+COPY ossflow-splitter /app/ossflow-splitter
+WORKDIR /app/ossflow-splitter
 
 EXPOSE 8001
 HEALTHCHECK --interval=30s --timeout=5s --start-period=30s --retries=3 \

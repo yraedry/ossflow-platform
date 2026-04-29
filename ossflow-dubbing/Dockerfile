@@ -79,7 +79,7 @@ RUN ldconfig \
 # in the runtime path. Runtime verification happens via the FastAPI
 # startup hook (which logs s2.cpp stdout).
 
-COPY dubbing-generator/requirements.txt /app/requirements.txt
+COPY ossflow-dubbing/requirements.txt /app/requirements.txt
 
 RUN --mount=type=cache,target=/root/.cache/pip \
     pip install -r /app/requirements.txt \
@@ -98,8 +98,8 @@ RUN mkdir -p /models/piper && cd /models/piper && \
 # Pre-cache Kokoro-82M (kept as fallback engine, not the default).
 RUN python3 -c "from kokoro import KPipeline; KPipeline(lang_code='e')" || true
 
-COPY dubbing-generator /app/dubbing-generator
-WORKDIR /app/dubbing-generator
+COPY ossflow-dubbing /app/ossflow-dubbing
+WORKDIR /app/ossflow-dubbing
 
 # HF cache still used by torch hub (silero-vad en VoiceCloner) y demucs.
 ENV HF_HOME=/models/huggingface \
