@@ -1,9 +1,8 @@
 # syntax=docker/dockerfile:1.7
-# Build context: ../python
 
 # ----- Stage 1: s2.cpp CUDA builder -------------------------------------
 # Uses NVIDIA's CUDA 12.4 devel image on Ubuntu 22.04 (GLIBC 2.35 — matches
-# bjj-base CUDA 12.4 runtime so the binary loads cleanly in the runtime
+# ossflow-base CUDA 12.4 runtime so the binary loads cleanly in the runtime
 # stage).
 #
 # Why CUDA and not Vulkan: Docker Desktop on Windows/WSL2 does NOT inject
@@ -52,9 +51,9 @@ RUN cmake -B build \
  && find /src/s2.cpp/build -name "libggml*.so*" -exec ls -la {} +
 
 # ----- Stage 2: dubbing-generator runtime -------------------------------
-FROM bjj-base:latest
+FROM ossflow-base:latest
 
-# CUDA runtime libs come from bjj-base (which is built on
+# CUDA runtime libs come from ossflow-base (which is built on
 # nvidia/cuda:12.4-runtime). No Vulkan, no extra graphics tooling needed.
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     --mount=type=cache,target=/var/lib/apt,sharing=locked \
@@ -76,16 +75,15 @@ RUN ldconfig \
 # Note: `libcuda.so.1 => not found` in `ldd` output during build is
 # EXPECTED — that lib comes from the NVIDIA driver injected by
 # nvidia-container-toolkit at runtime. We cannot run `s2 --help` in
-# build to smoke-test because `bjj-base` doesn't ship the driver stub
+# build to smoke-test because `ossflow-base` doesn't ship the driver stub
 # in the runtime path. Runtime verification happens via the FastAPI
 # startup hook (which logs s2.cpp stdout).
 
-COPY bjj_service_kit /app/bjj_service_kit
 COPY dubbing-generator/requirements.txt /app/requirements.txt
 
 RUN --mount=type=cache,target=/root/.cache/pip \
     pip install -r /app/requirements.txt \
- && pip install -e /app/bjj_service_kit \
+ && pip install --no-cache-dir "ossflow-service-kit @ git+https://github.com/yraedry/ossflow-core@v0.1.0#subdirectory=ossflow_service_kit" \
  && pip uninstall -y pytest pytest-asyncio || true \
  && find /opt/venv -depth -type d -name "__pycache__" -exec rm -rf {} + \
  && find /opt/venv -type f -name "*.pyc" -delete \

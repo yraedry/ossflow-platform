@@ -1,18 +1,16 @@
 # syntax=docker/dockerfile:1.7
-# Build context: ../python
-# Requiere bjj-base:latest pre-construido (ver python/bjj-base/Dockerfile).
-FROM bjj-base:latest
+# Requiere ossflow-base:latest pre-construido (ver python/ossflow-base/Dockerfile).
+FROM ossflow-base:latest
 
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     --mount=type=cache,target=/var/lib/apt,sharing=locked \
     apt-get update && apt-get install -y --no-install-recommends mkvtoolnix
 
-COPY bjj_service_kit /app/bjj_service_kit
 COPY chapter-splitter/requirements.txt /app/requirements.txt
 
 RUN --mount=type=cache,target=/root/.cache/pip \
     pip install -r /app/requirements.txt \
- && pip install -e /app/bjj_service_kit \
+ && pip install --no-cache-dir "ossflow-service-kit @ git+https://github.com/yraedry/ossflow-core@v0.1.0#subdirectory=ossflow_service_kit" \
  && pip uninstall -y pytest pytest-asyncio || true \
  && find /opt/venv -depth -type d -name "__pycache__" -exec rm -rf {} + \
  && find /opt/venv -type f -name "*.pyc" -delete \

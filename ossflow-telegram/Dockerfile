@@ -10,8 +10,7 @@ RUN apt-get update \
 WORKDIR /app
 
 # Shared service kit first (small, stable) — provides app factory, /health, /logs.
-COPY bjj_service_kit /opt/bjj_service_kit
-RUN pip install --no-cache-dir /opt/bjj_service_kit
+RUN pip install --no-cache-dir "ossflow-service-kit @ git+https://github.com/yraedry/ossflow-core@v0.1.0#subdirectory=ossflow_service_kit"
 
 # Python deps for telegram-fetcher.
 COPY telegram-fetcher/requirements.txt /tmp/requirements.txt
