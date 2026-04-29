@@ -9,7 +9,10 @@
 #   - ossflow-subtitle:   WhisperX (GPU)           → :8002
 #   - ossflow-dubbing:    ElevenLabs cloud TTS     → :8003
 #   - ossflow-telegram:   Descarga de media        → :8004
-#   - ollama:             LLM local (opt-in)       → :11434
+#
+# Ollama:
+#   Vive en un LXC externo. Configurar OLLAMA_BASE_URL en .env
+#   (ej. OLLAMA_BASE_URL=http://10.10.100.13:11434).
 #
 # Requiere:
 #   - ossflow-base:latest construido desde el repo ossflow-core.
@@ -42,8 +45,10 @@ services:
       - SUBS_URL=http://ossflow-subtitle:8002
       - DUBBING_URL=http://ossflow-dubbing:8003
       - TELEGRAM_FETCHER_URL=http://ossflow-telegram:8004
-      - OLLAMA_BASE_URL=${OLLAMA_BASE_URL:-http://ollama:11434}
-      - OLLAMA_URL=${OLLAMA_BASE_URL:-http://ollama:11434}
+      # Ollama vive en un LXC externo. Configurar OLLAMA_BASE_URL en .env
+      # (ej. OLLAMA_BASE_URL=http://10.10.100.13:11434).
+      - OLLAMA_BASE_URL=${OLLAMA_BASE_URL:?Define OLLAMA_BASE_URL en .env (host del Ollama externo)}
+      - OLLAMA_URL=${OLLAMA_BASE_URL}
       - ELEVENLABS_API_KEY=${ELEVENLABS_API_KEY:-}
     depends_on:
       ossflow-splitter:
@@ -104,7 +109,7 @@ services:
     environment:
       - PYTHONUNBUFFERED=1
       - NVIDIA_VISIBLE_DEVICES=all
-      - OLLAMA_BASE_URL=${OLLAMA_BASE_URL:-http://ollama:11434}
+      - OLLAMA_BASE_URL=${OLLAMA_BASE_URL:?Define OLLAMA_BASE_URL en .env (host del Ollama externo)}
     networks:
       - ossflow_net
     healthcheck:
@@ -191,36 +196,6 @@ services:
       start_period: 15s
     restart: unless-stopped
 
-  ollama:
-    profiles: ["ollama"]
-    image: ollama/ollama:latest
-    container_name: ossflow-ollama
-    restart: unless-stopped
-    networks:
-      - ossflow_net
-    ports:
-      - "11434:11434"
-    volumes:
-      - ollama-models:/root/.ollama
-      - ./ollama/entrypoint.sh:/entrypoint.sh:ro
-    environment:
-      - OLLAMA_KEEP_ALIVE=2m
-      - OLLAMA_HOST=0.0.0.0:11434
-    entrypoint: ["/bin/bash", "-c", "tr -d '\\r' < /entrypoint.sh | bash"]
-    deploy:
-      resources:
-        reservations:
-          devices:
-            - driver: nvidia
-              count: all
-              capabilities: [gpu]
-    healthcheck:
-      test: ["CMD-SHELL", "curl -fsS http://localhost:11434/api/tags | grep -q qwen2.5:7b-instruct-q4_K_M"]
-      interval: 30s
-      timeout: 10s
-      retries: 30
-      start_period: 1200s
-
 volumes:
   config-data:
   ossflow-db:
@@ -231,7 +206,6 @@ volumes:
   model-cache:
   tg-session:
   tg-cache:
-  ollama-models:
   nas-library:
     driver: local
     driver_opts:
