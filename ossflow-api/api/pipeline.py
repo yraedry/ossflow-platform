@@ -73,22 +73,18 @@ _pipeline_tasks: dict[str, asyncio.Task] = {}
 _pipeline_cancel: dict[str, bool] = {}
 
 
+# SSE primitives — migradas a modules/pipeline/store.py (T_LATE_2.5b).
+# El state (_pipeline_subscribers) sigue siendo global del shim porque los
+# tests lo parchean por nombre.
+from ossflow_api.modules.pipeline import store as _store_mod  # noqa: E402
+
+
 def _subscribe(pipeline_id: str) -> asyncio.Queue:
-    q: asyncio.Queue = asyncio.Queue()
-    _pipeline_subscribers.setdefault(pipeline_id, []).append(q)
-    return q
+    return _store_mod.subscribe(_pipeline_subscribers, pipeline_id)
 
 
 def _unsubscribe(pipeline_id: str, q: asyncio.Queue) -> None:
-    subs = _pipeline_subscribers.get(pipeline_id)
-    if not subs:
-        return
-    try:
-        subs.remove(q)
-    except ValueError:
-        pass
-    if not subs:
-        _pipeline_subscribers.pop(pipeline_id, None)
+    _store_mod.unsubscribe(_pipeline_subscribers, pipeline_id, q)
 
 
 def _serialize(p: PipelineInfo) -> dict:
@@ -179,26 +175,10 @@ from ossflow_api.modules.pipeline.diff import (  # noqa: E402,F401
 
 
 async def _emit(pipeline: PipelineInfo, queue: asyncio.Queue, event: dict) -> None:
-    """Append to the persistent buffer (capped) and broadcast to all live
-    subscribers.
-
-    The ``queue`` argument is kept for backwards compatibility with call sites
-    but is ignored — we always fan-out to every subscriber registered for
-    this pipeline, so no consumer can "steal" events from another.
-    Each event is tagged with a monotonic ``seq`` for client-side dedupe
-    across reconnects (buffer replay would otherwise re-deliver events the
-    client already has).
+    """Wrapper retrocompat — la lógica vive en
+    ``modules/pipeline/store.emit``. ``queue`` se ignora (legacy).
     """
-    pipeline.event_seq += 1
-    event = {**event, "seq": pipeline.event_seq}
-    pipeline.log_buffer.append(event)
-    if len(pipeline.log_buffer) > 2000:
-        del pipeline.log_buffer[: len(pipeline.log_buffer) - 2000]
-    for q in list(_pipeline_subscribers.get(pipeline.pipeline_id, [])):
-        try:
-            q.put_nowait(event)
-        except asyncio.QueueFull:  # pragma: no cover - unbounded queues
-            pass
+    await _store_mod.emit(pipeline, _pipeline_subscribers, event)
 
 
 async def _run_step(
