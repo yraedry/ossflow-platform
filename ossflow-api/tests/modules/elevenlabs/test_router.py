@@ -1,25 +1,22 @@
-"""Tests for api.elevenlabs_dubbing + api.elevenlabs_dubbing_client.
+"""Tests para el módulo elevenlabs (servicio de orquestación + SDK wrapper).
 
-We mock the ElevenLabs SDK at import time via monkeypatch so the tests
-never actually hit the network. Two layers:
-
-  1. ``ElevenLabsDubbingClient`` — thin SDK wrapper, verified in isolation.
-  2. ``_run_elevenlabs_dubbing`` — async orchestration, verified via a
-     fake client that returns a scripted status transition.
+Mockeamos el SDK ElevenLabs vía monkeypatch para no tocar red. Dos capas:
+  1. ``ElevenLabsDubbingClient`` — wrapper SDK, verificado en aislamiento.
+  2. ``_run_elevenlabs_dubbing`` — orquestación async con cliente fake.
 """
 
 from __future__ import annotations
 
 import asyncio
 import sys
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+from enum import Enum
 from pathlib import Path
 from unittest.mock import MagicMock
 
 import pytest
 
-from api import elevenlabs_dubbing_client as client_module
-from api.elevenlabs_dubbing_client import (
+from ossflow_api.clients.elevenlabs import (
     DubbingJob,
     ElevenLabsDubbingClient,
     ElevenLabsDubbingError,
@@ -52,7 +49,7 @@ def test_resolve_output_path_keeps_original_filename(tmp_path):
     out = resolve_output_path(source)
 
     assert out.name == "Anything with - dashes.mkv"
-    assert out.name == source.name  # no suffix added
+    assert out.name == source.name
 
 
 # ---------------------------------------------------------------------------
@@ -61,7 +58,6 @@ def test_resolve_output_path_keeps_original_filename(tmp_path):
 
 @pytest.fixture
 def fake_sdk(monkeypatch):
-    """Install a fake ``elevenlabs.client.ElevenLabs`` on sys.modules."""
     fake_client_cls = MagicMock()
     fake_instance = MagicMock()
     fake_client_cls.return_value = fake_instance
@@ -160,25 +156,8 @@ def test_client_download_raises_on_empty(fake_sdk):
 
 
 # ---------------------------------------------------------------------------
-# _run_elevenlabs_dubbing orchestration
+# Orquestación de _run_elevenlabs_dubbing
 # ---------------------------------------------------------------------------
-
-# ---------------------------------------------------------------------------
-# _run_elevenlabs_dubbing orchestration
-# ---------------------------------------------------------------------------
-#
-# The orchestrator late-imports ``api.app`` via ``_job_host()`` to avoid
-# a circular import at module load. In unit tests we *don't* want to pull
-# in ``api.app`` either (it drags SQLAlchemy / ossflow_service_kit, which is
-# only installed inside the container). We fake the host registry with a
-# minimal stand-in that exposes the same three attributes the
-# orchestrator touches: ``_jobs``, ``_job_events``, ``_persist_job``,
-# plus ``JobInfo`` and ``JobStatus``.
-
-
-from dataclasses import dataclass, field
-from enum import Enum
-
 
 class _StubJobStatus(str, Enum):
     QUEUED = "queued"
@@ -207,15 +186,13 @@ class _StubHost:
         self.JobInfo = _StubJobInfo
 
     def _persist_job(self, job):
-        pass  # no-op in tests
+        pass
 
 
 @pytest.fixture
 def patched_client(monkeypatch):
-    """Replace ElevenLabsDubbingClient in the module with a scripted fake
-    and stub ``_job_host`` so tests never import ``api.app``.
-    """
-    from api import elevenlabs_dubbing as mod
+    """Sustituye ``ElevenLabsDubbingClient`` y ``_job_host`` en el servicio."""
+    from ossflow_api.modules.elevenlabs import service as mod
 
     class ScriptedClient:
         statuses = ["dubbing", "dubbing", "dubbed"]
@@ -235,13 +212,12 @@ def patched_client(monkeypatch):
     host = _StubHost()
 
     monkeypatch.setattr(mod, "ElevenLabsDubbingClient", ScriptedClient)
-    monkeypatch.setattr(mod, "_POLL_INTERVAL_S", 0)  # no sleep in tests
+    monkeypatch.setattr(mod, "_POLL_INTERVAL_S", 0)
     monkeypatch.setattr(mod, "_job_host", lambda: host)
     return mod, host
 
 
 def test_orchestration_happy_path(tmp_path, patched_client):
-    """Full flow: start → 2 polls → download → file on disk."""
     mod, host = patched_client
 
     source = tmp_path / "Season 01" / "S01E02 - Foo.mp4"
@@ -276,7 +252,6 @@ def test_orchestration_happy_path(tmp_path, patched_client):
 
 
 def test_orchestration_failure_sets_failed(monkeypatch, tmp_path, patched_client):
-    """A 'failed' status from ElevenLabs should flip the job to FAILED."""
     mod, host = patched_client
 
     class FailingClient:
@@ -316,7 +291,6 @@ def test_orchestration_failure_sets_failed(monkeypatch, tmp_path, patched_client
 # ---------------------------------------------------------------------------
 
 def test_resume_without_dubbing_id_marks_failed(tmp_path, patched_client):
-    """A zombie job (running, no dubbing_id) must be marked failed on startup."""
     mod, host = patched_client
 
     source = tmp_path / "v.mp4"
@@ -327,7 +301,7 @@ def test_resume_without_dubbing_id_marks_failed(tmp_path, patched_client):
         video_path=str(source),
     )
     job.status = host.JobStatus.RUNNING
-    job.result = {"provider": "elevenlabs"}  # no dubbing_id
+    job.result = {"provider": "elevenlabs"}
     host._jobs["zombie1"] = job
 
     summary = mod.resume_orphan_jobs()
@@ -338,7 +312,6 @@ def test_resume_without_dubbing_id_marks_failed(tmp_path, patched_client):
 
 
 def test_resume_missing_source_video_marks_failed(tmp_path, patched_client):
-    """Job with dubbing_id but source file gone → failed (we can't write output)."""
     mod, host = patched_client
 
     job = host.JobInfo(
@@ -358,7 +331,6 @@ def test_resume_missing_source_video_marks_failed(tmp_path, patched_client):
 
 
 def test_resume_with_dubbing_id_schedules_task(tmp_path, patched_client):
-    """Running job with dubbing_id + existing source → resume task is scheduled."""
     mod, host = patched_client
 
     source = tmp_path / "v.mp4"
@@ -372,13 +344,9 @@ def test_resume_with_dubbing_id_schedules_task(tmp_path, patched_client):
     job.result = {"dubbing_id": "dub_abc", "estimated_total_sec": 120}
     host._jobs["resume1"] = job
 
-    # asyncio.create_task needs a running loop. Drive the call inside
-    # a short-lived loop and then cancel pending tasks so the test exits.
     async def _drive():
         summary = mod.resume_orphan_jobs()
-        # Give the resume task one tick to register itself
         await asyncio.sleep(0)
-        # Cancel any tasks the resume scheduled so we don't hang
         for t in asyncio.all_tasks():
             if t is asyncio.current_task():
                 continue

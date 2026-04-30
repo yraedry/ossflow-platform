@@ -138,8 +138,12 @@ async def lifespan(app: FastAPI):
     # stopped. Done after _load_persisted_jobs so the _jobs registry is
     # populated; before yield so resume tasks start concurrently with
     # normal request handling.
+    # Acoplamiento #6 cerrado: resume_orphan_jobs es ahora un símbolo público
+    # del módulo elevenlabs (no un detalle de api/elevenlabs_dubbing.py).
+    # Cuando app.py migre a ossflow_api/main.py se registrará vía
+    # infrastructure.lifespan.register_startup.
     try:
-        from api.elevenlabs_dubbing import resume_orphan_jobs
+        from ossflow_api.modules.elevenlabs import resume_orphan_jobs
         resume_orphan_jobs()
     except Exception as exc:
         log.warning("elevenlabs resume_orphan_jobs failed: %s", exc)
@@ -192,7 +196,7 @@ from api.burn_subs import router as burn_subs_router  # noqa: E402
 from ossflow_api.modules.health import health_router as health_proxy_router  # noqa: E402
 from ossflow_api.modules.subtitles import subtitles_router as subtitles_router  # noqa: E402
 from ossflow_api.modules.dubbing import dubbing_router as dubbing_router  # noqa: E402
-from api.elevenlabs_dubbing import router as elevenlabs_dubbing_router  # noqa: E402
+from ossflow_api.modules.elevenlabs import elevenlabs_router as elevenlabs_dubbing_router  # noqa: E402
 from api.promote import router as promote_router  # noqa: E402
 # WIRE_ORACLE_ROUTER
 from api import oracle as oracle_module  # noqa: E402
