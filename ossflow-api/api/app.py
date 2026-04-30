@@ -192,10 +192,12 @@ from ossflow_api.modules.chapters import chapters_router as chapters_router  # n
 from ossflow_api.modules.cleanup import cleanup_router  # noqa: E402
 from ossflow_api.modules.duplicates import duplicates_router  # noqa: E402
 from api.background_jobs import router as bg_jobs_router  # noqa: E402
-from api.burn_subs import router as burn_subs_router  # noqa: E402
 from ossflow_api.modules.health import health_router as health_proxy_router  # noqa: E402
 from ossflow_api.modules.subtitles import subtitles_router as subtitles_router  # noqa: E402
-from ossflow_api.modules.dubbing import dubbing_router as dubbing_router  # noqa: E402
+from ossflow_api.modules.dubbing import (  # noqa: E402
+    burn_subs_router,
+    dubbing_router as dubbing_router,
+)
 from ossflow_api.modules.elevenlabs import elevenlabs_router as elevenlabs_dubbing_router  # noqa: E402
 from ossflow_api.modules.promote import promote_router as promote_router  # noqa: E402
 # WIRE_ORACLE_ROUTER
