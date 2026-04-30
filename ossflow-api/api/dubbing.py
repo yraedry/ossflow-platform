@@ -13,8 +13,10 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
 from api.paths import to_container_path
-from api.pipeline import _load_voice_profile_for_path
 from api.settings import get_library_path
+from ossflow_api.shared.voice_profiles import (
+    load_voice_profile_for_path as _load_voice_profile_for_path,
+)
 
 log = logging.getLogger(__name__)
 

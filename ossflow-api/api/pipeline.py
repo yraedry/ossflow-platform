@@ -290,29 +290,13 @@ def _load_oracle_for_path(host_path: str) -> Optional[dict]:
         return None
 
 
-def _load_voice_profile_for_path(host_path: str) -> str:
-    """Walk up from video path looking for .bjj-meta.json with voice_profile.
-
-    Videos live deep inside the tree (Season_NN / chapter files), so the
-    sidecar is typically 1-2 levels up. Empty string means "clone instructor".
-    """
-    p = Path(host_path)
-    current = p if p.is_dir() else p.parent
-    for _ in range(4):  # at most 4 levels up (Season / chapters / file)
-        sidecar = current / SIDECAR_NAME
-        if sidecar.exists():
-            try:
-                data = json.loads(sidecar.read_text(encoding="utf-8"))
-                if isinstance(data, dict):
-                    vp = data.get("voice_profile")
-                    if isinstance(vp, str) and vp:
-                        return vp
-            except (OSError, ValueError) as exc:
-                log.warning("Failed to read voice_profile from %s: %s", sidecar, exc)
-        if current.parent == current:
-            break
-        current = current.parent
-    return ""
+# La lógica de _load_voice_profile_for_path se movió a
+# ossflow_api/shared/voice_profiles.py para romper el import cruzado privado
+# que hacía dubbing.py (acoplamiento #1 del Plan 2). Mantenemos el alias
+# privado aquí para no obligar a cambiar todos los call sites en este commit.
+from ossflow_api.shared.voice_profiles import (
+    load_voice_profile_for_path as _load_voice_profile_for_path,
+)
 
 
 def _client_and_payload(
