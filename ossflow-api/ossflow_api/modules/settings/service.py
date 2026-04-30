@@ -48,6 +48,7 @@ class SettingsService:
             log.warning("init_db failed: %s", exc)
         self._maybe_import_legacy_json()
         self._migrate_legacy_translation_settings()
+        self._migrate_legacy_tts_settings()
         self._initialized = True
 
     @staticmethod
@@ -91,6 +92,38 @@ class SettingsService:
                     s.delete(deepl_row)
         except Exception as exc:  # noqa: BLE001
             log.warning("legacy translation settings migration failed: %s", exc)
+
+    # Settings TTS obsoletos tras la limpieza T22.5 (eliminación de los
+    # motores ElevenLabs/Piper/Kokoro). Las filas se borran al primer
+    # arranque tras el deploy. Idempotente: ejecuciones posteriores son
+    # no-op porque las filas ya no están.
+    _LEGACY_TTS_KEYS = (
+        "tts_engine",
+        "elevenlabs_voice_id",
+        "elevenlabs_model_id",
+        "elevenlabs_api_key",
+        "piper_model_path",
+        "kokoro_voice",
+    )
+
+    @classmethod
+    def _migrate_legacy_tts_settings(cls) -> None:
+        """One-shot delete de settings de motores TTS eliminados (T22.5).
+
+        Mismo patrón que ``_migrate_legacy_translation_settings``: borra las
+        filas obsoletas para que el sistema no tenga estado huérfano. Si
+        un usuario tenía ``tts_engine="elevenlabs"`` persistido, esa fila
+        desaparece y al próximo ``load()`` el merge con ``DEFAULTS`` no la
+        reintroduce (no existe en ``DEFAULTS``).
+        """
+        try:
+            with session_scope() as s:
+                for key in cls._LEGACY_TTS_KEYS:
+                    row = s.get(Setting, key)
+                    if row is not None:
+                        s.delete(row)
+        except Exception as exc:  # noqa: BLE001
+            log.warning("legacy TTS settings migration failed: %s", exc)
 
     # --- Lectura -----------------------------------------------------------
 
@@ -246,40 +279,6 @@ class SettingsService:
                 return "custom_prompts must be a JSON object", None
             current["custom_prompts"] = cp
 
-        if "tts_engine" in body:
-            te = body["tts_engine"]
-            if not isinstance(te, str) or te.strip().lower() not in (
-                "s2pro", "elevenlabs", "piper", "kokoro",
-            ):
-                return "tts_engine must be 's2pro', 'elevenlabs', 'piper' or 'kokoro'", None
-            current["tts_engine"] = te.strip().lower()
-
-        if "elevenlabs_voice_id" in body:
-            v = body["elevenlabs_voice_id"]
-            if v is not None and not isinstance(v, str):
-                return "elevenlabs_voice_id must be a string or null", None
-            current["elevenlabs_voice_id"] = v.strip() if isinstance(v, str) else v
-
-        if "elevenlabs_model_id" in body:
-            v = body["elevenlabs_model_id"]
-            if v is not None and not isinstance(v, str):
-                return "elevenlabs_model_id must be a string or null", None
-            current["elevenlabs_model_id"] = v.strip() if isinstance(v, str) else v
-
-        if "piper_model_path" in body:
-            v = body["piper_model_path"]
-            if v is not None and not isinstance(v, str):
-                return "piper_model_path must be a string or null", None
-            current["piper_model_path"] = v.strip() if isinstance(v, str) else v
-
-        if "kokoro_voice" in body:
-            v = body["kokoro_voice"]
-            if v is not None and not isinstance(v, str):
-                return "kokoro_voice must be a string or null", None
-            if isinstance(v, str) and v.strip() and v.strip() not in ("em_alex", "em_santa"):
-                return "kokoro_voice must be 'em_alex' or 'em_santa'", None
-            current["kokoro_voice"] = v.strip() if isinstance(v, str) else v
-
         if "s2_voice_profile" in body:
             v = body["s2_voice_profile"]
             if v is not None and not isinstance(v, str):
@@ -313,6 +312,12 @@ class SettingsService:
             if not isinstance(v, int) or isinstance(v, bool) or not 128 <= v <= 2048:
                 return "s2_max_tokens must be an integer in [128, 2048]", None
             current["s2_max_tokens"] = v
+
+        if "s2_quantization" in body:
+            v = body["s2_quantization"]
+            if not isinstance(v, str) or v.strip().lower() not in ("q4_k_m", "q6_k"):
+                return "s2_quantization must be 'q4_k_m' or 'q6_k'", None
+            current["s2_quantization"] = v.strip().lower()
 
         self.save(current)
         return None, current

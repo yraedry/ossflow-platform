@@ -15,7 +15,6 @@ TELEGRAM_HASH_RE = re.compile(r"^[0-9a-fA-F]{32}$")
 SECRET_KEYS: set[str] = {
     "openai_api_key",
     "telegram_api_hash",
-    "elevenlabs_api_key",
     "deepl_api_key",
 }
 
@@ -39,24 +38,18 @@ DEFAULTS: dict[str, Any] = {
     # each ES line to fit the SRT slot so TTS comes out on-time without audio
     # stretch. Works with chat-based providers (Ollama or OpenAI, both budget-aware).
     "translation_dubbing_mode": True,
-    "translation_dubbing_cps": 17.0,   # R12: 17 (antes 13). Con tts_engine=elevenlabs la prosodia cloud aguanta densidad Netflix-grade (17 cps es el estándar ES profesional). XTTS requería 13 porque su speed=1.05 fijo no absorbía texto largo sin sonar robótico; ElevenLabs multilingual_v2 pronuncia a cadencia natural y deja el stretcher del pipeline para ajustes finos de slot. Para volver a XTTS, bajar a 13.
-    # Motor TTS: "elevenlabs" (cloud, voice cloning, paid) o "piper"
-    # (local ONNX, voz preset ES, gratis, sin cloning).
-    "tts_engine": "elevenlabs",
-    # voice_id pre-registrado en ElevenLabs (PVC o IVC). Ignorado si tts_engine != "elevenlabs".
-    "elevenlabs_voice_id": "",
-    "elevenlabs_model_id": "eleven_multilingual_v2",
-    # Path al modelo Piper ONNX (dentro del contenedor dubbing-generator).
-    # Default = es_ES-sharvard-medium baked into the image.
-    "piper_model_path": "/models/piper/es_ES-sharvard-medium.onnx",
-    # Voz Kokoro-82M (preset ES masculina). Alternativa: em_santa.
-    "kokoro_voice": "em_alex",
-    # Fish Audio S2-Pro local voice-clone TTS. Engine value "s2pro" enables
-    # the dubbing-generator to call the in-container s2.cpp HTTP server.
-    # ``s2_voice_profile`` is a basename inside /voices; the dubbing-generator
-    # rebuilds the absolute path before calling the server. ``s2_ref_text``
-    # MUST exactly match the audio in the voice WAV — drift collapses
-    # voice-clone quality.
+    # Chars-per-second target para la traducción iso-síncrona del SRT.
+    # 17 cps es el estándar ES profesional Netflix-grade que aguanta la
+    # prosodia neutral del clon S2-Pro sin necesidad de stretching de
+    # audio en el muxing.
+    "translation_dubbing_cps": 17.0,
+    # Fish Audio S2-Pro local voice-clone TTS — único motor TTS soportado
+    # tras T22.5 (eliminados ElevenLabs/Piper/Kokoro).
+    # ``s2_voice_profile`` es un basename dentro de /voices; el
+    # dubbing-generator reconstruye el path absoluto antes de llamar al
+    # servidor s2.cpp embebido. ``s2_ref_text`` DEBE coincidir
+    # EXACTAMENTE con el audio del WAV de referencia — la deriva colapsa
+    # la calidad del clon de voz.
     "s2_voice_profile": "voice_martin_osborne_24k.wav",
     "s2_ref_text": (
         "nunca te olvidé, nunca, el último beso que me diste todavía está "
@@ -67,6 +60,12 @@ DEFAULTS: dict[str, Any] = {
     "s2_top_p": 0.8,
     "s2_top_k": 30,
     "s2_max_tokens": 1024,
+    # Cuantización del modelo GGUF S2-Pro:
+    #   q4_k_m: ~3 GB VRAM, calidad menor, encaja en GPUs de 6 GB.
+    #   q6_k:   ~5 GB VRAM, mejor calidad, recomendada en ≥8 GB.
+    # El path absoluto se construye en pipeline.py como
+    # /models/s2pro/s2-pro-{quant}.gguf antes de pasarlo al dubbing.
+    "s2_quantization": "q6_k",
     # OpenAI post-process for the English SRT produced by WhisperX.
     # Cleans syllable-duplication artifacts and broken mid-clause boundaries
     # while preserving timestamps and block count. Uses openai_api_key.
