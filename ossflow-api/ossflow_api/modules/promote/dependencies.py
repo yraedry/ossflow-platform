@@ -1,0 +1,64 @@
+"""Dependencias FastAPI del módulo promote.
+
+``_singleton`` mantiene un único ``PromoteService`` por proceso para que
+los locks por season se compartan entre requests (el patrón legacy era un
+``dict`` global de módulo; ahora vive como atributo de instancia del
+singleton).
+"""
+
+from __future__ import annotations
+
+from .service import PromoteService
+
+_singleton: PromoteService | None = None
+
+
+def _default_cache_factory() -> object:
+    """Factoría diferida para ``ScanCache``.
+
+    Import en runtime para no acoplar el módulo a ``api.scan_cache`` /
+    ``api.settings`` en tiempo de import (mismo patrón que el resto de
+    módulos migrados).
+    """
+    from api.scan_cache import ScanCache
+    from api.settings import CONFIG_DIR
+
+    return ScanCache(CONFIG_DIR / "library.json")
+
+
+def _default_refresh_flags(item: dict) -> None:
+    """Wrapper diferido a ``api.library_refresh.refresh_instructional_flags``."""
+    from api.library_refresh import refresh_instructional_flags
+
+    refresh_instructional_flags(item)
+
+
+def _default_library_path_loader() -> str | None:
+    """Wrapper diferido a ``api.settings.get_library_path``."""
+    from api.settings import get_library_path
+
+    return get_library_path()
+
+
+def get_promote_service() -> PromoteService:
+    """Factory inyectada vía ``Depends()`` por el router.
+
+    Devuelve un singleton scope-app para que los locks por season vivan
+    durante toda la vida del proceso (de otro modo dos requests
+    concurrentes para la misma season verían instancias distintas y la
+    serialización se perdería).
+    """
+    global _singleton
+    if _singleton is None:
+        _singleton = PromoteService(
+            library_path_loader=_default_library_path_loader,
+            cache_factory=_default_cache_factory,
+            refresh_flags=_default_refresh_flags,
+        )
+    return _singleton
+
+
+def reset_for_tests() -> None:
+    """Limpia el singleton entre tests."""
+    global _singleton
+    _singleton = None

@@ -197,7 +197,7 @@ from ossflow_api.modules.health import health_router as health_proxy_router  # n
 from ossflow_api.modules.subtitles import subtitles_router as subtitles_router  # noqa: E402
 from ossflow_api.modules.dubbing import dubbing_router as dubbing_router  # noqa: E402
 from ossflow_api.modules.elevenlabs import elevenlabs_router as elevenlabs_dubbing_router  # noqa: E402
-from api.promote import router as promote_router  # noqa: E402
+from ossflow_api.modules.promote import promote_router as promote_router  # noqa: E402
 # WIRE_ORACLE_ROUTER
 from api import oracle as oracle_module  # noqa: E402
 # WIRE_TELEGRAM_ROUTER
