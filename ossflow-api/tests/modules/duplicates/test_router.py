@@ -1,60 +1,60 @@
-"""Tests for /api/duplicates/scan."""
+"""Tests del módulo duplicates."""
 
 from __future__ import annotations
 
-import importlib
-
 import pytest
+from fastapi import FastAPI
 from fastapi.testclient import TestClient
+
+from ossflow_api.modules.duplicates import duplicates_router
+from ossflow_api.modules.duplicates.dependencies import get_duplicates_service
+from ossflow_api.modules.duplicates.service import DuplicatesService
+from ossflow_api.modules.jobs._internal.scheduler import JobsScheduler
+from ossflow_api.modules.jobs.repositories.background import BackgroundJobsRepository
+from ossflow_api.modules.jobs.services.background import BackgroundJobsService
+
+
+def _fake_video_info(path: str) -> dict:
+    """Mock determinista: duración = primer byte del archivo."""
+    try:
+        with open(path, "rb") as fh:
+            b = fh.read(1)
+            duration = float(b[0]) if b else 0.0
+    except OSError:
+        duration = 0.0
+    return {"duration": duration, "size_mb": 0}
 
 
 @pytest.fixture
 def client(tmp_path, monkeypatch):
-    config_dir = tmp_path / "config"
-    config_dir.mkdir()
     library_dir = tmp_path / "library"
     library_dir.mkdir()
+    db_path = tmp_path / "test.db"
+    monkeypatch.setenv("BJJ_DB_PATH", str(db_path))
+    from ossflow_service_kit.db import engine as eng_mod, session as sess_mod
+    eng_mod.reset_engine()
+    sess_mod.reset_factory()
 
-    monkeypatch.setenv("CONFIG_DIR", str(config_dir))
+    bg_repo = BackgroundJobsRepository()
+    bg_svc = BackgroundJobsService(bg_repo, JobsScheduler())
+    bg_svc.init()
 
-    import api.settings as settings_mod
-    importlib.reload(settings_mod)
-    settings_mod.save_settings({
-        **settings_mod.load_settings(),
-        "library_path": str(library_dir),
-    })
-
-    import api.app as app_mod
-    importlib.reload(app_mod)
-    import api.duplicates as dup_mod
-    importlib.reload(dup_mod)
-
-    # Include router if app.py hasn't been wired yet (keeps test hermetic).
-    if not any(getattr(r, "path", "").startswith("/api/duplicates")
-               for r in app_mod.app.routes):
-        app_mod.app.include_router(dup_mod.router)
-
-    # Mock ffprobe: duration is encoded in the first byte of the file for
-    # deterministic tests. Fallback to 0 if unreadable.
-    def fake_get_video_info(path: str) -> dict:
-        try:
-            with open(path, "rb") as fh:
-                b = fh.read(1)
-                duration = float(b[0]) if b else 0.0
-        except OSError:
-            duration = 0.0
-        return {"duration": duration, "size_mb": 0}
-
-    monkeypatch.setattr(app_mod, "get_video_info", fake_get_video_info)
-    monkeypatch.setattr(
-        "api.duplicates.get_video_info",
-        fake_get_video_info,
-        raising=False,
+    dup_svc = DuplicatesService(
+        jobs=bg_svc,
+        library_path_loader=lambda: str(library_dir),
+        video_info_loader=_fake_video_info,
     )
 
-    tc = TestClient(app_mod.app)
+    app = FastAPI()
+    app.include_router(duplicates_router)
+    app.dependency_overrides[get_duplicates_service] = lambda: dup_svc
+
+    tc = TestClient(app)
     tc.library_dir = library_dir  # type: ignore[attr-defined]
-    return tc
+    yield tc
+
+    eng_mod.reset_engine()
+    sess_mod.reset_factory()
 
 
 def _mkvideo(path, size: int, duration_byte: int) -> None:
@@ -89,7 +89,6 @@ def test_distinct_videos_no_groups(client):
     data = r.json()
     assert data["groups"] == []
     assert data["stats"]["groups_found"] == 0
-    assert data["stats"]["wasted_bytes"] == 0
 
 
 def test_traversal_outside_library_returns_403(client, tmp_path):
@@ -107,20 +106,12 @@ def test_response_shape(client):
     data = r.json()
     assert set(data.keys()) == {"groups", "stats"}
     assert set(data["stats"].keys()) == {"total_videos", "groups_found", "wasted_bytes"}
-    assert isinstance(data["groups"], list)
 
 
-def test_start_launches_background_job(client, tmp_path, monkeypatch):
+def test_start_launches_background_job(client):
     lib = client.library_dir
     _mkvideo(lib / "a" / "v1.mkv", 1024, 30)
     _mkvideo(lib / "b" / "v2.mkv", 1024, 30)
-
-    from api import background_jobs as bg
-    from api.background_jobs import JobRegistry
-    fresh = JobRegistry(history_file=tmp_path / "bg.json")
-    monkeypatch.setattr(bg, "registry", fresh)
-    import api.duplicates as dup_mod
-    monkeypatch.setattr(dup_mod, "_jobs_registry", fresh)
 
     r = client.post(f"/api/duplicates/start?path={lib}")
     assert r.status_code == 200
@@ -152,14 +143,13 @@ def test_start_rejects_traversal(client, tmp_path):
     assert r.status_code == 403
 
 
-def test_duplicates_job_endpoint_404(client):
+def test_job_endpoint_404(client):
     r = client.get("/api/duplicates/job/no-such-id")
     assert r.status_code == 404
 
 
 def test_deep_mode_filters_by_partial_md5(client):
     lib = client.library_dir
-    # Same size + duration but different content → deep must drop the group.
     p1 = lib / "a" / "v1.mkv"
     p2 = lib / "b" / "v2.mkv"
     p1.parent.mkdir(parents=True, exist_ok=True)

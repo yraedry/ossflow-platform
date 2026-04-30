@@ -190,7 +190,7 @@ from ossflow_api.modules.metrics import metrics_router  # noqa: E402
 from ossflow_api.modules.metadata import metadata_router  # noqa: E402
 from ossflow_api.modules.chapters import chapters_router as chapters_router  # noqa: E402
 from ossflow_api.modules.cleanup import cleanup_router  # noqa: E402
-from api.duplicates import router as duplicates_router  # noqa: E402
+from ossflow_api.modules.duplicates import duplicates_router  # noqa: E402
 from api.background_jobs import router as bg_jobs_router  # noqa: E402
 from api.burn_subs import router as burn_subs_router  # noqa: E402
 from ossflow_api.modules.health import health_router as health_proxy_router  # noqa: E402
