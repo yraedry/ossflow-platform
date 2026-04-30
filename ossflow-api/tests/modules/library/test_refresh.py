@@ -1,12 +1,17 @@
-"""Tests for ffprobe-based has_dubbing / has_subtitles detection
-introduced for the promote feature."""
+"""Tests del módulo library.refresh — detección ffprobe de has_dubbing /
+has_subtitles introducida para la feature ``promote``.
+
+Migrado de ``tests/test_library_refresh_dub_detect.py`` durante T23.2:
+los monkeypatches ahora apuntan al módulo nuevo
+``ossflow_api.modules.library.refresh``.
+"""
 
 from __future__ import annotations
 
 from pathlib import Path
 from unittest.mock import patch
 
-from api import library_refresh as lr
+from ossflow_api.modules.library import refresh as lr
 
 
 def _patch_probe(audio: list[str], subs: list[str] | None = None):
@@ -17,7 +22,7 @@ def _patch_probe(audio: list[str], subs: list[str] | None = None):
 
 
 def test_has_dubbing_via_doblajes_sibling(tmp_path):
-    """Pre-promotion: doblajes/<name>.mkv exists → has_dubbing without
+    """Pre-promotion: ``doblajes/<name>.mkv`` exists → has_dubbing without
     needing the audio probe (but the probe still runs to seed the cache)."""
     season = tmp_path / "Season 01"
     season.mkdir()
@@ -34,7 +39,7 @@ def test_has_dubbing_via_doblajes_sibling(tmp_path):
 
 
 def test_has_dubbing_via_audio_probe_post_promotion(tmp_path):
-    """Post-promotion: only <name>.mkv remains, but it has Spanish audio."""
+    """Post-promotion: only ``<name>.mkv`` remains, but it has Spanish audio."""
     season = tmp_path / "Season 01"
     season.mkdir()
     video = season / "S01E01.mkv"
@@ -61,7 +66,7 @@ def test_no_dubbing_for_plain_original(tmp_path):
 
 
 def test_subtitles_via_external_sidecars(tmp_path):
-    """No embedded subs but .es.srt and .en.srt exist on disk."""
+    """No embedded subs but ``.es.srt`` and ``.en.srt`` exist on disk."""
     season = tmp_path / "Season 01"
     season.mkdir()
     video = season / "S01E01.mp4"
@@ -76,8 +81,8 @@ def test_subtitles_via_external_sidecars(tmp_path):
 
 
 def test_subtitles_via_embedded_streams_post_promote(tmp_path):
-    """After promote: no .srt sidecars left, but the .mkv has embedded
-    subtitle streams. has_subtitles_en/es must still be True."""
+    """After promote: no ``.srt`` sidecars left, but the ``.mkv`` has
+    embedded subtitle streams. ``has_subtitles_en/es`` must still be True."""
     season = tmp_path / "Season 01"
     season.mkdir()
     video = season / "S01E01.mkv"
@@ -90,7 +95,7 @@ def test_subtitles_via_embedded_streams_post_promote(tmp_path):
 
 
 def test_subtitles_only_one_language_embedded(tmp_path):
-    """A .mkv with ONLY english embedded subs → has_subtitles_en True,
+    """A ``.mkv`` with ONLY english embedded subs → has_subtitles_en True,
     has_subtitles_es False (no sidecar, no embedded ES)."""
     season = tmp_path / "Season 01"
     season.mkdir()
@@ -146,8 +151,8 @@ def test_probe_reruns_when_file_modified(tmp_path):
 
 def test_probe_reruns_when_subtitle_languages_missing_from_cache(tmp_path):
     """Older library.json entries (pre-subtitle-cache) don't have
-    subtitle_languages — _video_flags must re-probe to fill it in even
-    when the audio fingerprint matches."""
+    ``subtitle_languages`` — ``_video_flags`` must re-probe to fill it in
+    even when the audio fingerprint matches."""
     season = tmp_path / "Season 01"
     season.mkdir()
     video = season / "S01E01.mkv"
