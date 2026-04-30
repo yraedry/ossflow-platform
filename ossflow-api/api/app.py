@@ -202,6 +202,7 @@ from ossflow_api.modules.elevenlabs import elevenlabs_router as elevenlabs_dubbi
 from ossflow_api.modules.promote import promote_router as promote_router  # noqa: E402
 # WIRE_ORACLE_ROUTER
 from ossflow_api.modules.scrapper import scrapper_router  # noqa: E402
+from ossflow_api.modules.voices import voices_router  # noqa: E402
 # WIRE_TELEGRAM_ROUTER
 from ossflow_api.modules.telegram import telegram_router  # noqa: E402
 
@@ -224,6 +225,7 @@ app.include_router(subtitles_router)
 app.include_router(dubbing_router)
 app.include_router(elevenlabs_dubbing_router)
 app.include_router(promote_router)
+app.include_router(voices_router)
 # WIRE_ORACLE_ROUTER
 app.include_router(scrapper_router)
 # WIRE_TELEGRAM_ROUTER
@@ -1500,76 +1502,7 @@ async def api_extract_chapters(path: str):
         return JSONResponse({"error": str(exc)}, status_code=500)
 
 
-# ---------------------------------------------------------------------------
-# Voice Profiles
-# ---------------------------------------------------------------------------
-
-@app.get("/api/voice-profiles")
-async def api_list_voice_profiles():
-    """List all instructor voice profiles."""
-    from voice_profiles.manager import VoiceProfileManager
-
-    try:
-        mgr = VoiceProfileManager()
-        profiles = mgr.list_profiles()
-        return {"profiles": [p.to_dict() for p in profiles]}
-    except Exception as exc:
-        log.error("list_voice_profiles failed: %s", exc)
-        return JSONResponse({"error": str(exc)}, status_code=500)
-
-
-@app.post("/api/voice-profiles")
-async def api_create_voice_profile(request: Request):
-    """Extract and save a voice profile for an instructor."""
-    from voice_profiles.manager import VoiceProfileManager
-
-    body = await _parse_json_body(request)
-    video_path = body.get("video_path", "")
-    instructor = body.get("instructor", "")
-    start_sec = float(body.get("start_sec", 60))
-    duration = float(body.get("duration", 15))
-
-    if not video_path or not instructor:
-        return JSONResponse(
-            {"error": "Missing 'video_path' or 'instructor'"},
-            status_code=400,
-        )
-    if not Path(video_path).exists():
-        return JSONResponse({"error": "Video file not found"}, status_code=404)
-
-    try:
-        mgr = VoiceProfileManager()
-        profile = mgr.extract_sample(
-            Path(video_path), instructor,
-            start_sec=start_sec, duration=duration,
-        )
-        return {"ok": True, "profile": profile.to_dict()}
-    except FileNotFoundError as exc:
-        return JSONResponse({"error": str(exc)}, status_code=404)
-    except RuntimeError as exc:
-        return JSONResponse({"error": str(exc)}, status_code=500)
-    except Exception as exc:
-        log.error("create_voice_profile failed: %s", exc)
-        return JSONResponse({"error": str(exc)}, status_code=500)
-
-
-@app.delete("/api/voice-profiles/{instructor}")
-async def api_delete_voice_profile(instructor: str):
-    """Delete a voice profile for an instructor."""
-    from voice_profiles.manager import VoiceProfileManager
-
-    try:
-        mgr = VoiceProfileManager()
-        deleted = mgr.delete_profile(instructor)
-        if deleted:
-            return {"ok": True, "message": f"Deleted profile for '{instructor}'"}
-        return JSONResponse(
-            {"error": f"No profile found for '{instructor}'"},
-            status_code=404,
-        )
-    except Exception as exc:
-        log.error("delete_voice_profile failed: %s", exc)
-        return JSONResponse({"error": str(exc)}, status_code=500)
+# Endpoints /api/voice-profiles migrados a ossflow_api/modules/voices (T25).
 
 
 # ---------------------------------------------------------------------------
