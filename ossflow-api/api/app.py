@@ -167,7 +167,7 @@ app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
 
 # Register routers (E7)
-from api.settings import router as settings_router  # noqa: E402
+from ossflow_api.modules.settings import settings_router  # noqa: E402
 from api.pipeline import router as pipeline_router   # noqa: E402
 from api.preflight import router as preflight_router  # noqa: E402
 from ossflow_api.modules.logs import (  # noqa: E402
