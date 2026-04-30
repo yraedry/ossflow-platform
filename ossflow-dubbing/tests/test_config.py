@@ -56,17 +56,13 @@ def test_custom_overrides():
     assert cfg.max_compression_ratio == 1.3
 
 
-def test_xtts_defaults():
+def test_default_engine_is_s2pro():
+    """Tras T22.5 el motor por defecto (y único) es S2-Pro."""
     cfg = DubbingConfig()
-    assert cfg.tts_engine == "xttsv2"
-    assert cfg.xtts_model_name == "tts_models/multilingual/multi-dataset/xtts_v2"
-    assert cfg.xtts_config_path == ""
-    assert cfg.xtts_checkpoint_dir == ""
-    assert cfg.xtts_use_deepspeed is False
-    # Ronda 8: code-switching DESACTIVADO por defecto. XTTS-v2 no
-    # soporta alternar ``language`` entre inferencias dentro del mismo
-    # discurso sin alucinar a chino/japonés (el GPT-autoregresivo
-    # arrastra estado). Fix definitivo: single-span ES para todo.
+    assert cfg.tts_engine == "s2pro"
+    # Los campos xtts_* siguen como vestigial defaults para no romper
+    # callers externos pero no se leen por ningún synthesizer.
+    assert cfg.xtts_model_name == ""
     assert cfg.xtts_code_switching is False
     assert cfg.xtts_en_terms_extra == ()
 
@@ -91,14 +87,19 @@ def test_tail_speed_nudge_defaults():
     assert cfg.tail_speed_nudge_max_ratio == 1.45
 
 
-def test_elevenlabs_defaults():
+def test_legacy_motor_fields_removed():
+    """Tras T22.5: ningún campo legacy de motores eliminados existe en
+    ``DubbingConfig``. Solo S2-Pro está soportado."""
     cfg = DubbingConfig()
-    assert cfg.elevenlabs_voice_id == "LlZr3QuzbW4WrPjgATHG"
-    assert cfg.elevenlabs_model_id == "eleven_multilingual_v2"
-    assert cfg.elevenlabs_stability == 0.5
-    assert cfg.elevenlabs_similarity_boost == 0.75
-    assert cfg.elevenlabs_style == 0.0
-    assert cfg.elevenlabs_use_speaker_boost is True
-    assert cfg.elevenlabs_output_format == "pcm_24000"
-    assert cfg.elevenlabs_api_key_env == "ELEVENLABS_API_KEY"
-    assert cfg.elevenlabs_request_timeout == 60.0
+    legacy_fields = (
+        "elevenlabs_voice_id", "elevenlabs_model_id", "elevenlabs_stability",
+        "elevenlabs_similarity_boost", "elevenlabs_style",
+        "elevenlabs_use_speaker_boost", "elevenlabs_output_format",
+        "elevenlabs_api_key_env", "elevenlabs_request_timeout",
+        "piper_model_path", "piper_length_scale", "piper_noise_scale",
+        "piper_noise_w", "kokoro_lang_code", "kokoro_voice", "kokoro_speed",
+    )
+    for field in legacy_fields:
+        assert not hasattr(cfg, field), f"campo legacy '{field}' aún en DubbingConfig"
+    # tts_engine se conserva como sentinel de invariante.
+    assert cfg.tts_engine == "s2pro"
