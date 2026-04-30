@@ -49,7 +49,6 @@ services:
       # (ej. OLLAMA_BASE_URL=http://10.10.100.13:11434).
       - OLLAMA_BASE_URL=${OLLAMA_BASE_URL:?Define OLLAMA_BASE_URL en .env (host del Ollama externo)}
       - OLLAMA_URL=${OLLAMA_BASE_URL}
-      - ELEVENLABS_API_KEY=${ELEVENLABS_API_KEY:-}
     depends_on:
       ossflow-splitter:
         condition: service_healthy
@@ -149,8 +148,14 @@ services:
       - HF_HOME=/models/huggingface
       - XDG_CACHE_HOME=/models/cache
       - DUBBING_MODEL_VOICE_PATH=${DUBBING_MODEL_VOICE_PATH:-}
-      - ELEVENLABS_API_KEY=${ELEVENLABS_API_KEY:-}
-      - DUBBING_TTS_ENGINE=${DUBBING_TTS_ENGINE:-}
+      # S2-Pro es el único motor TTS soportado tras T22.5 (eliminados
+      # ElevenLabs/Piper/Kokoro). La cuantización ahora se controla
+      # también desde la UI vía el setting ``s2_quantization`` (q4_k_m
+      # | q6_k); el path absoluto se construye en pipeline.py y se
+      # pasa al dubbing en el RunRequest. Este env var actúa como
+      # fallback inicial cuando aún no hay setting persistido en BD:
+      #   q4_k_m: ~3 GB VRAM, calidad menor, encaja en GPUs de 6 GB.
+      #   q6_k:   ~5 GB VRAM, mejor calidad, recomendada en ≥8 GB.
       - S2PRO_GGUF_PATH=${S2PRO_GGUF_PATH:-/models/s2pro/s2-pro-q6_k.gguf}
       - S2PRO_TOKENIZER_PATH=${S2PRO_TOKENIZER_PATH:-/models/s2pro/tokenizer.json}
     networks:
