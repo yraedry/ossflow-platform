@@ -325,225 +325,28 @@ def _client_and_payload(
     raise ValueError(f"Unknown step: {step_name}")
 
 
-def _target_dir(pipeline: PipelineInfo) -> Optional[Path]:
-    """Host directory to snapshot for diffing (output_dir or video dir)."""
-    out = pipeline.options.get("output_dir")
-    if out:
-        p = Path(out)
-    else:
-        pp = Path(pipeline.path)
-        p = pp if pp.is_dir() else pp.parent
-    try:
-        if p.exists() and p.is_dir():
-            return p
-    except OSError:
-        return None
-    return None
-
-
-def _snapshot_dir(base: Optional[Path]) -> dict[str, tuple[int, float]]:
-    """Return {relative_path: (size, mtime)} for all files under base."""
-    if base is None:
-        return {}
-    out: dict[str, tuple[int, float]] = {}
-    try:
-        for f in base.rglob("*"):
-            try:
-                if not f.is_file():
-                    continue
-                st = f.stat()
-                rel = f.relative_to(base).as_posix()
-                out[rel] = (st.st_size, st.st_mtime)
-            except OSError:
-                continue
-    except OSError:
-        return {}
-    return out
-
-
-def _compute_diff(
-    before: dict[str, tuple[int, float]],
-    after: dict[str, tuple[int, float]],
-    limit: int = 200,
-) -> dict:
-    added_all = [p for p in after if p not in before]
-    removed_all = [p for p in before if p not in after]
-    modified_all = [
-        p for p in after
-        if p in before and (
-            before[p][0] != after[p][0] or abs(before[p][1] - after[p][1]) > 0.001
-        )
-    ]
-    def _trunc(lst):
-        return lst[:limit], len(lst) > limit
-    added, a_t = _trunc(sorted(added_all))
-    modified, m_t = _trunc(sorted(modified_all))
-    removed, r_t = _trunc(sorted(removed_all))
-    return {
-        "added": added,
-        "modified": modified,
-        "removed": removed,
-        "truncated": a_t or m_t or r_t,
-    }
-
-
-_VIDEO_EXTS = (".mkv", ".mp4", ".avi", ".mov")
-_SEASON_DIR_RE = re.compile(r"^Season\s*\d+$", re.IGNORECASE)
-_DUB_SUFFIXES = ("_DOBLADO.mkv", "_DOBLADO.mp4")
-_CHAPTER_SE_RE = re.compile(r"S\d{2}E\d{2}", re.IGNORECASE)
-
-
-def _chapter_has_en_subs(chapter: Path) -> bool:
-    """True if a chapter already has English subtitles available.
-
-    Checks: ``<base>.en.srt`` / ``<base>.srt`` sidecar, or an embedded
-    subtitle stream tagged eng/en/english (post-promote evidence).
-    """
-    folder = chapter.parent
-    base = chapter.stem
-    if (folder / f"{base}.en.srt").exists() or (folder / f"{base}.srt").exists():
-        return True
-    try:
-        from ossflow_api.modules.library.refresh import _probe_track_languages, _has_english_subtitle
-        _, sub_langs = _probe_track_languages(chapter)
-        if _has_english_subtitle(sub_langs):
-            return True
-    except Exception as exc:
-        log.debug("ffprobe failed for %s: %s", chapter, exc)
-    return False
-
-
-def _chapter_has_es_subs(chapter: Path, dubbing_mode: bool) -> bool:
-    """True if a chapter already has Spanish subtitles for the requested track.
-
-    When ``dubbing_mode`` is True the translate step produces
-    ``<base>.dub.es.srt`` (anchor-aware adaptation for TTS); the literal
-    ``<base>.es.srt`` is a different artifact and not interchangeable.
-    Otherwise the literal track is what's requested.
-
-    Embedded ES subtitle streams satisfy either request — they exist only
-    after a promote, which always carries the literal track.
-    """
-    folder = chapter.parent
-    base = chapter.stem
-    if dubbing_mode:
-        if (folder / f"{base}.dub.es.srt").exists():
-            return True
-    else:
-        candidates = (
-            f"{base}.es.srt",
-            f"{base}.ES.srt",
-            f"{base}_ES.srt",
-            f"{base}_ESP_DUB.srt",
-        )
-        if any((folder / c).exists() for c in candidates):
-            return True
-    try:
-        from ossflow_api.modules.library.refresh import _probe_track_languages, _has_spanish_subtitle
-        _, sub_langs = _probe_track_languages(chapter)
-        if _has_spanish_subtitle(sub_langs):
-            return True
-    except Exception as exc:
-        log.debug("ffprobe failed for %s: %s", chapter, exc)
-    return False
-
-
-def _chapter_is_dubbed(chapter: Path) -> bool:
-    """True if a chapter video already has Spanish dubbing.
-
-    Sources of truth (any one is enough):
-      - legacy XTTS sidecar:        ``<base>_DOBLADO.mkv|.mp4`` next to source
-      - flujo B v5 pre-promote:     ``<folder>/doblajes/<base>.mkv``
-      - Studio E2E pre-promote:     ``<folder>/elevenlabs/<chapter.name>``
-      - promoted multi-track:       audio stream tagged spa/es/spanish
-
-    The first three were already what the library scanner checks. The fourth
-    is what was missing: after ``promote`` merges the dubbed audio as a
-    second track and deletes ``doblajes/``, the only surviving evidence is
-    the ffprobe language tag. Without this check, re-running the dubbing
-    step on a promoted Season would re-dub everything from scratch.
-    """
-    folder = chapter.parent
-    base = chapter.stem
-    if any((folder / f"{base}{sfx}").exists() for sfx in _DUB_SUFFIXES):
-        return True
-    if (folder / "doblajes" / f"{base}.mkv").exists():
-        return True
-    if (folder / "elevenlabs" / chapter.name).exists():
-        return True
-    try:
-        from ossflow_api.modules.library.refresh import _probe_track_languages, _has_spanish_audio
-        audio_langs, _ = _probe_track_languages(chapter)
-        if _has_spanish_audio(audio_langs):
-            return True
-    except Exception as exc:  # ffprobe may be missing in tests
-        log.debug("ffprobe failed for %s: %s", chapter, exc)
-    return False
-
-
-def _list_chapters(season_dir: Path) -> list[Path]:
-    if not season_dir.exists() or not season_dir.is_dir():
-        return []
-    return [
-        p for p in season_dir.iterdir()
-        if p.is_file()
-        and p.suffix.lower() in _VIDEO_EXTS
-        and _CHAPTER_SE_RE.search(p.name)
-    ]
-
-
-def _season_already_dubbed(season_dir: Path) -> tuple[bool, int, int]:
-    """Return (all_dubbed, dubbed_count, total_count) for chapters in season_dir.
-
-    Empty seasons return (False, 0, 0) — there's nothing to skip on.
-    """
-    chapters = _list_chapters(season_dir)
-    if not chapters:
-        return False, 0, 0
-    dubbed = sum(1 for c in chapters if _chapter_is_dubbed(c))
-    return dubbed == len(chapters), dubbed, len(chapters)
-
-
-def _season_already_subbed_en(season_dir: Path) -> tuple[bool, int, int]:
-    chapters = _list_chapters(season_dir)
-    if not chapters:
-        return False, 0, 0
-    n = sum(1 for c in chapters if _chapter_has_en_subs(c))
-    return n == len(chapters), n, len(chapters)
-
-
-def _season_already_subbed_es(season_dir: Path, dubbing_mode: bool) -> tuple[bool, int, int]:
-    chapters = _list_chapters(season_dir)
-    if not chapters:
-        return False, 0, 0
-    n = sum(1 for c in chapters if _chapter_has_es_subs(c, dubbing_mode))
-    return n == len(chapters), n, len(chapters)
-
-
-def _detect_season_folder(target: Optional[Path], added: list[str]) -> Optional[str]:
-    """Given the diff ``added`` list (paths relative to target_dir), return the
-    absolute host path of the Season folder where new chapters landed.
-
-    Heuristic: group added video files by their immediate parent directory;
-    prefer parents whose name matches ``Season NN``; break ties by file count.
-    """
-    if target is None or not added:
-        return None
-    from collections import Counter
-    parents: Counter = Counter()
-    for rel in added:
-        if not rel.lower().endswith(_VIDEO_EXTS):
-            continue
-        parts = rel.rsplit("/", 1)
-        if len(parts) != 2:
-            continue
-        parents[parts[0]] += 1
-    if not parents:
-        return None
-    # Prefer "Season NN" directories.
-    season_like = {p: c for p, c in parents.items() if _SEASON_DIR_RE.match(Path(p).name)}
-    chosen = max(season_like or parents, key=lambda k: (season_like or parents)[k])
-    return str(target / chosen)
+# Skip-detection y diff — migrados a modules/pipeline/{skip_detector,diff}.py
+# (T_LATE_2.3). Re-export con prefijo _ para preservar la API que parchean
+# los tests (api.pipeline._chapter_has_*, _detect_season_folder, etc.).
+from ossflow_api.modules.pipeline.skip_detector import (  # noqa: E402,F401
+    CHAPTER_SE_RE as _CHAPTER_SE_RE,
+    DUB_SUFFIXES as _DUB_SUFFIXES,
+    chapter_has_en_subs as _chapter_has_en_subs,
+    chapter_has_es_subs as _chapter_has_es_subs,
+    chapter_is_dubbed as _chapter_is_dubbed,
+    list_chapters as _list_chapters,
+    season_already_dubbed as _season_already_dubbed,
+    season_already_subbed_en as _season_already_subbed_en,
+    season_already_subbed_es as _season_already_subbed_es,
+)
+from ossflow_api.modules.pipeline.diff import (  # noqa: E402,F401
+    SEASON_DIR_RE as _SEASON_DIR_RE,
+    VIDEO_EXTS as _VIDEO_EXTS,
+    compute_diff as _compute_diff,
+    detect_season_folder as _detect_season_folder,
+    snapshot_dir as _snapshot_dir,
+    target_dir as _target_dir,
+)
 
 
 async def _emit(pipeline: PipelineInfo, queue: asyncio.Queue, event: dict) -> None:
