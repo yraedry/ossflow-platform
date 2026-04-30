@@ -1,4 +1,4 @@
-"""Tests para api.cleanup."""
+"""Tests del módulo cleanup."""
 
 from __future__ import annotations
 
@@ -10,17 +10,42 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from api import cleanup as cleanup_mod
-from api.cleanup import router as cleanup_router
+from ossflow_api.modules.cleanup import cleanup_router
+from ossflow_api.modules.cleanup.dependencies import get_cleanup_service
+from ossflow_api.modules.cleanup.repository import CleanupRepository
+from ossflow_api.modules.cleanup.service import CleanupService
+from ossflow_api.modules.jobs._internal.scheduler import JobsScheduler
+from ossflow_api.modules.jobs.repositories.background import BackgroundJobsRepository
+from ossflow_api.modules.jobs.services.background import BackgroundJobsService
 
 
 @pytest.fixture
 def client(tmp_path, monkeypatch):
     """Monta la API y apunta library_path al tmp_path."""
-    monkeypatch.setattr(cleanup_mod, "get_library_path", lambda: str(tmp_path))
+    db_path = tmp_path / "test.db"
+    monkeypatch.setenv("BJJ_DB_PATH", str(db_path))
+    from ossflow_service_kit.db import engine as eng_mod, session as sess_mod
+    eng_mod.reset_engine()
+    sess_mod.reset_factory()
+
+    bg_repo = BackgroundJobsRepository()
+    bg_svc = BackgroundJobsService(bg_repo, JobsScheduler())
+    bg_svc.init()
+
+    cleanup_svc = CleanupService(
+        repo=CleanupRepository(),
+        jobs=bg_svc,
+        library_path_loader=lambda: str(tmp_path),
+    )
+
     app = FastAPI()
     app.include_router(cleanup_router)
-    return TestClient(app), tmp_path
+    app.dependency_overrides[get_cleanup_service] = lambda: cleanup_svc
+
+    yield TestClient(app), tmp_path
+
+    eng_mod.reset_engine()
+    sess_mod.reset_factory()
 
 
 def _touch(p: Path, content: bytes = b"x", mtime: float | None = None) -> Path:
@@ -34,7 +59,7 @@ def _touch(p: Path, content: bytes = b"x", mtime: float | None = None) -> Path:
 def test_scan_detects_orphan_srt(client):
     c, root = client
     _touch(root / "pair.mkv", b"video")
-    _touch(root / "pair.en.srt", b"sub")  # emparejado por base stem
+    _touch(root / "pair.en.srt", b"sub")
     _touch(root / "lonely.srt", b"orphan")
 
     resp = c.get("/api/cleanup/scan", params={"path": str(root)})
@@ -100,7 +125,6 @@ def test_scan_shape_and_totals(client):
 
 def test_scan_rejects_traversal(client):
     c, root = client
-    # Intento de ir fuera de root
     outside = root.parent / "not_under_lib"
     outside.mkdir(exist_ok=True)
     resp = c.get("/api/cleanup/scan", params={"path": str(outside)})
@@ -117,7 +141,7 @@ def test_apply_dry_run_does_not_delete(client):
     assert resp.status_code == 200
     data = resp.json()
     assert str(f) in data["deleted"]
-    assert f.exists()  # dry_run: no lo borra
+    assert f.exists()
     assert data["dry_run"] is True
 
 
@@ -125,7 +149,6 @@ def test_apply_real_deletes_and_rejects_plain_video(client):
     c, root = client
     f_tmp = _touch(root / "junk.bak", b"abcd")
     f_video = _touch(root / "clean.mkv", b"keep")
-    # vídeo doblado sí se puede borrar
     f_dub = _touch(root / "v_DOBLADO.mkv", b"dub")
 
     resp = c.post(
@@ -141,31 +164,21 @@ def test_apply_real_deletes_and_rejects_plain_video(client):
     assert str(f_dub) in data["deleted"]
     assert not f_tmp.exists()
     assert not f_dub.exists()
-    # el vídeo plano debe permanecer y aparecer como error
     assert f_video.exists()
     assert any(str(f_video) == e["path"] for e in data["errors"])
     assert data["freed_bytes"] >= 4
 
 
-def test_start_launches_background_job(client, monkeypatch, tmp_path):
+def test_start_launches_background_job(client):
     c, root = client
     _touch(root / "junk.tmp", b"abc")
     _touch(root / "lonely.srt", b"ab")
-
-    # Point the registry to a fresh tmp history file so this test is hermetic
-    from api import background_jobs as bg
-    from api.background_jobs import JobRegistry
-    fresh = JobRegistry(history_file=tmp_path / "bg.json")
-    monkeypatch.setattr(bg, "registry", fresh)
-    import api.cleanup as cleanup_mod
-    monkeypatch.setattr(cleanup_mod, "_jobs_registry", fresh)
 
     resp = c.post(f"/api/cleanup/start?path={root}")
     assert resp.status_code == 200
     job_id = resp.json()["job_id"]
     assert job_id
 
-    # Poll /job/{id} until it finishes
     import time as _t
     deadline = _t.time() + 3.0
     final = None
