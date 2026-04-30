@@ -541,49 +541,12 @@ def _refresh_scan_cache_for(pipeline_path: str) -> None:
 # Routes
 # ---------------------------------------------------------------------------
 
-def _duration_seconds(started: Optional[str], completed: Optional[str]) -> Optional[float]:
-    if not started or not completed:
-        return None
-    try:
-        t0 = datetime.fromisoformat(started)
-        t1 = datetime.fromisoformat(completed)
-        delta = (t1 - t0).total_seconds()
-        return delta if delta > 0 else None
-    except (ValueError, TypeError):
-        return None
-
-
-def _median(values: list[float]) -> float:
-    s = sorted(values)
-    n = len(s)
-    mid = n // 2
-    if n % 2:
-        return s[mid]
-    return (s[mid - 1] + s[mid]) / 2
-
-
-def _total_video_duration(path_str: str) -> Optional[float]:
-    """Resolve total video duration in seconds for a file or a directory."""
-    try:
-        from api.app import get_video_info  # lazy to avoid circular import
-    except Exception:  # noqa: BLE001
-        return None
-    p = Path(path_str)
-    if not p.exists():
-        return None
-    if p.is_file():
-        info = get_video_info(str(p))
-        d = info.get("duration") if isinstance(info, dict) else 0
-        return float(d) if d else None
-    exts = {".mkv", ".mp4", ".avi", ".mov", ".webm"}
-    total = 0.0
-    for f in p.rglob("*"):
-        if f.is_file() and f.suffix.lower() in exts:
-            info = get_video_info(str(f))
-            d = info.get("duration") if isinstance(info, dict) else 0
-            if d:
-                total += float(d)
-    return total if total > 0 else None
+# ETA helpers — migrados a modules/pipeline/eta.py (T_LATE_2.5a).
+from ossflow_api.modules.pipeline.eta import (  # noqa: E402,F401
+    duration_seconds as _duration_seconds,
+    median as _median,
+    total_video_duration as _total_video_duration,
+)
 
 
 @router.post("/flush-gpu")
