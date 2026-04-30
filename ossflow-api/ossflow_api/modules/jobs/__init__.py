@@ -27,9 +27,17 @@ from .models import (
     JobStatus,
     LegacyJob,
 )
+from .routers.background import router as bg_jobs_router
+from .routers.legacy import router as legacy_jobs_router
+from .services.background import BackgroundJobsService
+from .services.legacy import LegacyJobsService
 
 __all__ = [
     "BackgroundJob",
     "JobStatus",
     "LegacyJob",
+    "BackgroundJobsService",
+    "LegacyJobsService",
+    "bg_jobs_router",
+    "legacy_jobs_router",
 ]
