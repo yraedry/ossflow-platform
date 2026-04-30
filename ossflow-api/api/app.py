@@ -201,7 +201,7 @@ from ossflow_api.modules.dubbing import (  # noqa: E402
 from ossflow_api.modules.elevenlabs import elevenlabs_router as elevenlabs_dubbing_router  # noqa: E402
 from ossflow_api.modules.promote import promote_router as promote_router  # noqa: E402
 # WIRE_ORACLE_ROUTER
-from api import oracle as oracle_module  # noqa: E402
+from ossflow_api.modules.scrapper import scrapper_router  # noqa: E402
 # WIRE_TELEGRAM_ROUTER
 from ossflow_api.modules.telegram import telegram_router  # noqa: E402
 
@@ -225,7 +225,7 @@ app.include_router(dubbing_router)
 app.include_router(elevenlabs_dubbing_router)
 app.include_router(promote_router)
 # WIRE_ORACLE_ROUTER
-app.include_router(oracle_module.router)
+app.include_router(scrapper_router)
 # WIRE_TELEGRAM_ROUTER
 app.include_router(telegram_router)
 
@@ -917,7 +917,8 @@ async def api_library_poster_redownload(name: str):
     Returns 404 if no oracle.poster_url is present.
     """
     from api.settings import get_library_path
-    from api.oracle import _download_poster_if_missing, SIDECAR_NAME
+    from ossflow_api.modules.scrapper.dependencies import get_scrapper_service
+    from ossflow_api.modules.scrapper.service import SIDECAR_NAME
     import json as _json
 
     lib = get_library_path()
@@ -945,7 +946,8 @@ async def api_library_poster_redownload(name: str):
     if not poster_url:
         raise HTTPException(status_code=404, detail="no poster_url in oracle")
 
-    saved = await _download_poster_if_missing(target, poster_url, force=True)
+    svc = get_scrapper_service()
+    saved = await svc.download_poster(target, poster_url, force=True)
     if not saved:
         raise HTTPException(status_code=502, detail="poster download failed")
     patch_poster_in_cache(_scan_cache, name, saved)
