@@ -548,7 +548,7 @@ def _chapter_has_en_subs(chapter: Path) -> bool:
     if (folder / f"{base}.en.srt").exists() or (folder / f"{base}.srt").exists():
         return True
     try:
-        from api.library_refresh import _probe_track_languages, _has_english_subtitle
+        from ossflow_api.modules.library.refresh import _probe_track_languages, _has_english_subtitle
         _, sub_langs = _probe_track_languages(chapter)
         if _has_english_subtitle(sub_langs):
             return True
@@ -583,7 +583,7 @@ def _chapter_has_es_subs(chapter: Path, dubbing_mode: bool) -> bool:
         if any((folder / c).exists() for c in candidates):
             return True
     try:
-        from api.library_refresh import _probe_track_languages, _has_spanish_subtitle
+        from ossflow_api.modules.library.refresh import _probe_track_languages, _has_spanish_subtitle
         _, sub_langs = _probe_track_languages(chapter)
         if _has_spanish_subtitle(sub_langs):
             return True
@@ -616,7 +616,7 @@ def _chapter_is_dubbed(chapter: Path) -> bool:
     if (folder / "elevenlabs" / chapter.name).exists():
         return True
     try:
-        from api.library_refresh import _probe_track_languages, _has_spanish_audio
+        from ossflow_api.modules.library.refresh import _probe_track_languages, _has_spanish_audio
         audio_langs, _ = _probe_track_languages(chapter)
         if _has_spanish_audio(audio_langs):
             return True
@@ -1012,11 +1012,10 @@ async def _run_pipeline(pipeline: PipelineInfo, queue: asyncio.Queue) -> None:
 def _refresh_scan_cache_for(pipeline_path: str) -> None:
     """Re-discover videos in the instructional folder and update the scan cache."""
     try:
-        from api.scan_cache import ScanCache
-        from api.settings import CONFIG_DIR
-        from api.library_refresh import rediscover_instructional
+        from ossflow_api.modules.library.dependencies import get_library_cache
+        from ossflow_api.modules.library.refresh import rediscover_instructional
 
-        cache = ScanCache(CONFIG_DIR / "library.json")
+        cache = get_library_cache()
         data = cache.load()
         if not data:
             return

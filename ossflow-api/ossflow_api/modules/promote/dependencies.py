@@ -14,21 +14,21 @@ _singleton: PromoteService | None = None
 
 
 def _default_cache_factory() -> object:
-    """Factoría diferida para ``ScanCache``.
+    """Devuelve el singleton ``LibraryCache`` del módulo library.
 
-    Import en runtime para no acoplar el módulo a ``api.scan_cache`` /
-    ``api.settings`` en tiempo de import (mismo patrón que el resto de
-    módulos migrados).
+    Cierre acoplamiento #8 (T23.6): un único cache compartido por todos
+    los módulos. Antes promote instanciaba un ``ScanCache`` paralelo que
+    leía el mismo fichero pero divergía en runtime de la cache de
+    library/scrapper.
     """
-    from api.scan_cache import ScanCache
-    from api.settings import CONFIG_DIR
+    from ossflow_api.modules.library.dependencies import get_library_cache
 
-    return ScanCache(CONFIG_DIR / "library.json")
+    return get_library_cache()
 
 
 def _default_refresh_flags(item: dict) -> None:
-    """Wrapper diferido a ``api.library_refresh.refresh_instructional_flags``."""
-    from api.library_refresh import refresh_instructional_flags
+    """Wrapper diferido a ``modules.library.refresh.refresh_instructional_flags``."""
+    from ossflow_api.modules.library.refresh import refresh_instructional_flags
 
     refresh_instructional_flags(item)
 

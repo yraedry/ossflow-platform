@@ -49,7 +49,7 @@ def test_chapter_dubbed_via_legacy_DOBLADO_sidecar(tmp_path):
     season = tmp_path / "Season 01"
     chapter = _touch(season / "Foo - S01E01.mkv")
     _touch(season / "Foo - S01E01_DOBLADO.mkv")
-    with patch("api.library_refresh._probe_track_languages", return_value=([], [])):
+    with patch("ossflow_api.modules.library.refresh._probe_track_languages", return_value=([], [])):
         assert _chapter_is_dubbed(chapter) is True
 
 
@@ -57,7 +57,7 @@ def test_chapter_dubbed_via_doblajes_folder(tmp_path):
     season = tmp_path / "Season 01"
     chapter = _touch(season / "Foo - S01E01.mkv")
     _touch(season / "doblajes" / "Foo - S01E01.mkv")
-    with patch("api.library_refresh._probe_track_languages", return_value=([], [])):
+    with patch("ossflow_api.modules.library.refresh._probe_track_languages", return_value=([], [])):
         assert _chapter_is_dubbed(chapter) is True
 
 
@@ -65,7 +65,7 @@ def test_chapter_dubbed_via_elevenlabs_folder(tmp_path):
     season = tmp_path / "Season 01"
     chapter = _touch(season / "Foo - S01E01.mkv")
     _touch(season / "elevenlabs" / "Foo - S01E01.mkv")
-    with patch("api.library_refresh._probe_track_languages", return_value=([], [])):
+    with patch("ossflow_api.modules.library.refresh._probe_track_languages", return_value=([], [])):
         assert _chapter_is_dubbed(chapter) is True
 
 
@@ -73,7 +73,7 @@ def test_chapter_dubbed_via_embedded_audio_track(tmp_path):
     """Post-promote: only the ES audio stream tag remains as evidence."""
     season = tmp_path / "Season 01"
     chapter = _touch(season / "Foo - S01E01.mkv")
-    with patch("api.library_refresh._probe_track_languages",
+    with patch("ossflow_api.modules.library.refresh._probe_track_languages",
                return_value=(["eng", "spa"], [])):
         assert _chapter_is_dubbed(chapter) is True
 
@@ -81,7 +81,7 @@ def test_chapter_dubbed_via_embedded_audio_track(tmp_path):
 def test_chapter_not_dubbed_when_only_english_audio(tmp_path):
     season = tmp_path / "Season 01"
     chapter = _touch(season / "Foo - S01E01.mkv")
-    with patch("api.library_refresh._probe_track_languages",
+    with patch("ossflow_api.modules.library.refresh._probe_track_languages",
                return_value=(["eng"], [])):
         assert _chapter_is_dubbed(chapter) is False
 
@@ -94,7 +94,7 @@ def test_season_all_dubbed(tmp_path):
     season = tmp_path / "Season 01"
     _touch(season / "Foo - S01E01.mkv")
     _touch(season / "Foo - S01E02.mkv")
-    with patch("api.library_refresh._probe_track_languages",
+    with patch("ossflow_api.modules.library.refresh._probe_track_languages",
                return_value=(["eng", "spa"], [])):
         all_d, dubbed, total = _season_already_dubbed(season)
         assert all_d is True
@@ -113,7 +113,7 @@ def test_season_partial_dubbed_returns_false(tmp_path):
             return ["eng", "spa"], []
         return ["eng"], []
 
-    with patch("api.library_refresh._probe_track_languages", side_effect=fake_probe):
+    with patch("ossflow_api.modules.library.refresh._probe_track_languages", side_effect=fake_probe):
         all_d, dubbed, total = _season_already_dubbed(season)
         assert all_d is False
         assert dubbed == 1
@@ -155,7 +155,7 @@ async def test_run_step_dubbing_skipped_when_all_chapters_dubbed(tmp_path):
     queue: asyncio.Queue = asyncio.Queue()
 
     # Fake ffprobe -> all chapters have spanish audio
-    with patch("api.library_refresh._probe_track_languages",
+    with patch("ossflow_api.modules.library.refresh._probe_track_languages",
                return_value=(["eng", "spa"], [])):
         # Backend client must NOT be hit
         with patch.object(pmod, "_client_and_payload",
@@ -188,7 +188,7 @@ async def test_run_step_dubbing_not_skipped_when_force_true(tmp_path):
     queue: asyncio.Queue = asyncio.Queue()
 
     sentinel = RuntimeError("backend-was-called-marker")
-    with patch("api.library_refresh._probe_track_languages",
+    with patch("ossflow_api.modules.library.refresh._probe_track_languages",
                return_value=(["eng", "spa"], [])):
         with patch.object(pmod, "_client_and_payload", side_effect=sentinel):
             ok = await _run_step(pipeline, 0, queue)
@@ -214,7 +214,7 @@ async def test_run_step_dubbing_not_skipped_when_chapters_not_dubbed(tmp_path):
     queue: asyncio.Queue = asyncio.Queue()
 
     sentinel = RuntimeError("backend-was-called-marker")
-    with patch("api.library_refresh._probe_track_languages",
+    with patch("ossflow_api.modules.library.refresh._probe_track_languages",
                return_value=(["eng"], [])):
         with patch.object(pmod, "_client_and_payload", side_effect=sentinel):
             ok = await _run_step(pipeline, 0, queue)

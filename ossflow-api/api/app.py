@@ -240,15 +240,7 @@ class JobInfo:
 # In-memory job store + persistent mirror
 _jobs: dict[str, JobInfo] = {}
 _job_events: dict[str, asyncio.Queue] = {}
-# T23.3: la cache de la biblioteca ahora vive en el módulo library.
-# Aquí solo exponemos un alias para los endpoints aún no migrados
-# (fs/browse, mount, browse, video-info, thumbnail, media). Cuando T23.4
-# y T23.5 los muevan, este alias desaparece. El scrapper sigue tirando
-# de ``api.app._scan_cache`` hasta T23.6 (cierre #8).
-from ossflow_api.modules.library.dependencies import get_library_cache as _get_library_cache  # noqa: E402
-
 _jobs_store = JobsStore(_CONFIG_DIR / "jobs.json")
-_scan_cache = _get_library_cache()
 
 
 def _persist_job(job: JobInfo) -> None:

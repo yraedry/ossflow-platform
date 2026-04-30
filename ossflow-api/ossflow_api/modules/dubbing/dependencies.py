@@ -13,15 +13,14 @@ from .service import DubbingService
 def _default_scan_cache_loader() -> Optional[dict]:
     """Carga la cache de escaneo de la librería desde disco.
 
-    Import diferido para no acoplar el módulo a ``api.scan_cache`` ni a
+    Import diferido para no acoplar el módulo a ``modules.library`` ni a
     ``api.settings`` en tiempo de import (mismo patrón que el resto de
-    módulos migrados).
+    módulos migrados). Usa el singleton ``LibraryCache`` del módulo
+    library — cierre acoplamiento #8 (T23.6).
     """
-    from api.scan_cache import ScanCache
-    from api.settings import CONFIG_DIR
+    from ossflow_api.modules.library.dependencies import get_library_cache
 
-    cache = ScanCache(CONFIG_DIR / "library.json")
-    return cache.load()
+    return get_library_cache().load()
 
 
 def get_dubbing_service() -> DubbingService:
