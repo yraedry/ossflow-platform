@@ -179,7 +179,7 @@ from ossflow_api.modules.logs import (  # noqa: E402
 # La gestión por lifespan se cableará cuando app.py migre a ossflow_api/main.py.
 _install_ring_buffer()
 from api.metrics import router as metrics_router  # noqa: E402
-from api.metadata import router as metadata_router  # noqa: E402
+from ossflow_api.modules.metadata import metadata_router  # noqa: E402
 from api.chapters import router as chapters_router  # noqa: E402
 from api.cleanup import router as cleanup_router  # noqa: E402
 from api.duplicates import router as duplicates_router  # noqa: E402

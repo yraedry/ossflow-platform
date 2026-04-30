@@ -1,4 +1,4 @@
-"""Tests for /api/library/{name}/metadata sidecar endpoints."""
+"""Tests del router del módulo metadata."""
 
 from __future__ import annotations
 
@@ -8,27 +8,28 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
+from ossflow_api.modules.metadata import metadata_router
+from ossflow_api.modules.metadata.dependencies import get_metadata_service
+from ossflow_api.modules.metadata.service import MetadataService
+
+DEFAULT_FULL = {
+    "instructor": "",
+    "topic": "",
+    "tags": [],
+    "synopsis": "",
+    "year": None,
+    "voice_profile": "",
+}
+
 
 @pytest.fixture
-def client(tmp_path, monkeypatch):
-    config_dir = tmp_path / "config"
-    config_dir.mkdir()
+def client(tmp_path):
     library_dir = tmp_path / "library"
     library_dir.mkdir()
 
-    monkeypatch.setenv("CONFIG_DIR", str(config_dir))
-
-    import importlib
-
-    import api.settings as settings_mod
-    importlib.reload(settings_mod)
-    settings_mod.save_settings({**settings_mod.load_settings(), "library_path": str(library_dir)})
-
-    import api.metadata as metadata_mod
-    importlib.reload(metadata_mod)
-
     app = FastAPI()
-    app.include_router(metadata_mod.router)
+    app.include_router(metadata_router)
+    app.dependency_overrides[get_metadata_service] = lambda: MetadataService(str(library_dir))
 
     tc = TestClient(app)
     tc.library_dir = library_dir  # type: ignore[attr-defined]
@@ -45,13 +46,7 @@ def test_get_metadata_defaults_when_missing(client):
     _mkfolder(client, "Foo")
     r = client.get("/api/library/Foo/metadata")
     assert r.status_code == 200
-    assert r.json() == {
-        "instructor": "",
-        "topic": "",
-        "tags": [],
-        "synopsis": "",
-        "year": None,
-    }
+    assert r.json() == DEFAULT_FULL
 
 
 def test_put_then_get_roundtrip(client):
@@ -62,6 +57,7 @@ def test_put_then_get_roundtrip(client):
         "tags": ["no-gi", "guard"],
         "synopsis": "Fundamentals of arm drags.",
         "year": 2024,
+        "voice_profile": "",
     }
     r = client.put("/api/library/Bar/metadata", json=payload)
     assert r.status_code == 200
@@ -71,8 +67,6 @@ def test_put_then_get_roundtrip(client):
     assert sidecar.exists()
     data = json.loads(sidecar.read_text(encoding="utf-8"))
     assert data == payload
-
-    # File indented with 2 spaces
     assert "  \"instructor\"" in sidecar.read_text(encoding="utf-8")
 
     r2 = client.get("/api/library/Bar/metadata")
@@ -83,20 +77,12 @@ def test_put_then_get_roundtrip(client):
 def test_put_validates_types(client):
     _mkfolder(client, "Baz")
 
-    r = client.put("/api/library/Baz/metadata", json={"instructor": 42})
-    assert r.status_code == 422
-
-    r = client.put("/api/library/Baz/metadata", json={"tags": "not-a-list"})
-    assert r.status_code == 422
-
-    r = client.put("/api/library/Baz/metadata", json={"tags": [1, 2, 3]})
-    assert r.status_code == 422
-
-    r = client.put("/api/library/Baz/metadata", json={"year": "abc"})
-    assert r.status_code == 422
-
-    r = client.put("/api/library/Baz/metadata", json={"synopsis": ["nope"]})
-    assert r.status_code == 422
+    assert client.put("/api/library/Baz/metadata", json={"instructor": 42}).status_code == 422
+    assert client.put("/api/library/Baz/metadata", json={"tags": "not-a-list"}).status_code == 422
+    assert client.put("/api/library/Baz/metadata", json={"tags": [1, 2, 3]}).status_code == 422
+    assert client.put("/api/library/Baz/metadata", json={"year": "abc"}).status_code == 422
+    assert client.put("/api/library/Baz/metadata", json={"synopsis": ["nope"]}).status_code == 422
+    assert client.put("/api/library/Baz/metadata", json={"voice_profile": 1}).status_code == 422
 
 
 def test_put_accepts_null_year_and_defaults(client):
@@ -105,12 +91,12 @@ def test_put_accepts_null_year_and_defaults(client):
     assert r.status_code == 200
     assert r.json()["year"] is None
     assert r.json()["tags"] == []
+    assert r.json()["voice_profile"] == ""
 
 
 def test_path_traversal_denied(client):
     r = client.get("/api/library/..%2F..%2Fetc/metadata")
     assert r.status_code in (403, 404)
-
     r = client.put("/api/library/..%2F..%2Fetc/metadata", json={})
     assert r.status_code in (403, 404)
 
@@ -118,3 +104,11 @@ def test_path_traversal_denied(client):
 def test_404_when_folder_missing(client):
     r = client.get("/api/library/NoSuchFolder/metadata")
     assert r.status_code == 404
+
+
+def test_get_recovers_from_corrupt_sidecar(client):
+    folder = _mkfolder(client, "Corrupt")
+    (folder / ".bjj-meta.json").write_text("not json", encoding="utf-8")
+    r = client.get("/api/library/Corrupt/metadata")
+    assert r.status_code == 200
+    assert r.json() == DEFAULT_FULL
