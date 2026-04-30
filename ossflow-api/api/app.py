@@ -186,7 +186,7 @@ from api.duplicates import router as duplicates_router  # noqa: E402
 from api.background_jobs import router as bg_jobs_router  # noqa: E402
 from api.burn_subs import router as burn_subs_router  # noqa: E402
 from ossflow_api.modules.health import health_router as health_proxy_router  # noqa: E402
-from api.subtitles import router as subtitles_router  # noqa: E402
+from ossflow_api.modules.subtitles import subtitles_router as subtitles_router  # noqa: E402
 from api.dubbing import router as dubbing_router  # noqa: E402
 from api.elevenlabs_dubbing import router as elevenlabs_dubbing_router  # noqa: E402
 from api.promote import router as promote_router  # noqa: E402
