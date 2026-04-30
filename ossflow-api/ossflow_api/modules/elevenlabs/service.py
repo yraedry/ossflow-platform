@@ -99,8 +99,28 @@ def _job_host():
     A nivel de import time crearíamos un ciclo (api.app importa este
     módulo). Con late import en cada call rompemos el ciclo.
 
-    Cuando F4.T19 cree ``JobsService``, esta función desaparece y los
-    callers reciben ``JobsService`` por DI.
+    **Acoplamiento #7 — estado: pendiente para F5.**
+
+    Originalmente el plan de T19.6 era inyectar ``LegacyJobsService`` en
+    este módulo y romper el late import. Tras analizar el coste real
+    (los runners ``run_chapter_detection``/``run_subtitle_generation``/
+    ``run_translation``/``run_dubbing`` viven aún en ``api/app.py`` y
+    siguen usando ``_jobs``/``_job_events``/``_persist_job`` directos),
+    se decidió:
+
+    1. ``LegacyJobsService`` es ya la fuente de verdad para los nuevos
+       endpoints ``POST /api/jobs`` (ver ``modules/jobs/routers/legacy.py``).
+    2. ``elevenlabs`` sigue usando ``_job_host()`` como espejo
+       sincronizado con ``app.py:_jobs`` mientras los runners de los
+       cuatro pipelines (chapters/subs/translate/dubbing) sigan en
+       ``app.py``. Cualquier doble escritura sería complejidad
+       innecesaria mientras el código legacy convive.
+    3. **F5** elimina ``app.py`` y migra los runners a sus módulos.
+       En ese momento ``_job_host()`` desaparece y los callers reciben
+       ``LegacyJobsService`` por DI (sub-paso post-pipeline).
+
+    Esta decisión está documentada también en
+    ``docs/superpowers/specs/2026-04-30-ossflow-api-jobs-module-design.md``.
     """
     from api import app as _app  # noqa: WPS433 — deliberate late import
     return _app
