@@ -203,6 +203,7 @@ from ossflow_api.modules.promote import promote_router as promote_router  # noqa
 # WIRE_ORACLE_ROUTER
 from ossflow_api.modules.scrapper import scrapper_router  # noqa: E402
 from ossflow_api.modules.voices import voices_router  # noqa: E402
+from ossflow_api.modules.export import export_router  # noqa: E402
 # WIRE_TELEGRAM_ROUTER
 from ossflow_api.modules.telegram import telegram_router  # noqa: E402
 
@@ -226,6 +227,7 @@ app.include_router(dubbing_router)
 app.include_router(elevenlabs_dubbing_router)
 app.include_router(promote_router)
 app.include_router(voices_router)
+app.include_router(export_router)
 # WIRE_ORACLE_ROUTER
 app.include_router(scrapper_router)
 # WIRE_TELEGRAM_ROUTER
@@ -1648,89 +1650,6 @@ async def api_media(path: str, request: Request):
             "Content-Length": str(length),
         },
     )
-
-
-# ---------------------------------------------------------------------------
-# OssFlow Export
-# ---------------------------------------------------------------------------
-
-@app.post("/api/export/ossflow")
-async def api_export_to_ossflow(request: Request):
-    """Export an instructional to the OssFlow backend."""
-    from ossflow_client.client import OssFlowClient, OssFlowConfig
-
-    body = await _parse_json_body(request)
-    root_dir = body.get("path", "")
-    instructor = body.get("instructor", "")
-    base_url = body.get("base_url", "http://localhost:8080")
-
-    if not root_dir or not instructor:
-        return JSONResponse(
-            {"error": "Missing 'path' or 'instructor'"},
-            status_code=400,
-        )
-    if not Path(root_dir).exists():
-        return JSONResponse({"error": "Path does not exist"}, status_code=404)
-
-    try:
-        config = OssFlowConfig(base_url=base_url)
-        client = OssFlowClient(config)
-        summary = client.export_full_instructional(Path(root_dir), instructor)
-        return {"ok": True, "summary": summary}
-    except Exception as exc:
-        log.error("export_to_ossflow failed: %s", exc)
-        return JSONResponse({"error": str(exc)}, status_code=500)
-
-
-@app.get("/api/export/ossflow/status")
-async def api_ossflow_status():
-    """Check if the OssFlow backend is reachable."""
-    from ossflow_client.client import OssFlowClient
-
-    try:
-        client = OssFlowClient()
-        reachable = client.health_check()
-        return {"reachable": reachable}
-    except Exception as exc:
-        log.error("ossflow_status failed: %s", exc)
-        return {"reachable": False, "error": str(exc)}
-
-
-# ---------------------------------------------------------------------------
-# Plex Export
-# ---------------------------------------------------------------------------
-
-@app.post("/api/export/plex")
-async def api_export_plex(request: Request):
-    """Export processed videos in Plex-compatible format."""
-    from chapter_tools.plex_exporter import PlexExporter
-
-    body = await _parse_json_body(request)
-    instructional_name = body.get("name", "")
-    chapters = body.get("chapters", [])
-    source_dir = body.get("source_dir", "")
-    output_dir = body.get("output_dir", "")
-
-    if not instructional_name or not chapters or not source_dir or not output_dir:
-        return JSONResponse(
-            {"error": "Missing required fields: name, chapters, source_dir, output_dir"},
-            status_code=400,
-        )
-    if not Path(source_dir).exists():
-        return JSONResponse({"error": "source_dir does not exist"}, status_code=404)
-
-    try:
-        exporter = PlexExporter()
-        exporter.export(instructional_name, chapters, Path(source_dir), Path(output_dir))
-        return {
-            "ok": True,
-            "message": f"Exported '{instructional_name}' to {output_dir}",
-        }
-    except FileNotFoundError as exc:
-        return JSONResponse({"error": str(exc)}, status_code=404)
-    except Exception as exc:
-        log.error("export_plex failed: %s", exc)
-        return JSONResponse({"error": str(exc)}, status_code=500)
 
 
 # ---------------------------------------------------------------------------
