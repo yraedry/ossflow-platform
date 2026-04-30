@@ -201,7 +201,7 @@ from api.promote import router as promote_router  # noqa: E402
 # WIRE_ORACLE_ROUTER
 from api import oracle as oracle_module  # noqa: E402
 # WIRE_TELEGRAM_ROUTER
-from api import telegram as telegram_module  # noqa: E402
+from ossflow_api.modules.telegram import telegram_router  # noqa: E402
 
 app.include_router(settings_router)
 # IMPORTANTE: preflight_router comparte prefix "/api/pipeline" con pipeline_router
@@ -225,7 +225,7 @@ app.include_router(promote_router)
 # WIRE_ORACLE_ROUTER
 app.include_router(oracle_module.router)
 # WIRE_TELEGRAM_ROUTER
-app.include_router(telegram_module.router)
+app.include_router(telegram_router)
 
 VIDEO_EXTENSIONS = {".mp4", ".mkv", ".avi", ".mov"}
 SUBTITLE_EXTENSIONS = {".srt"}
