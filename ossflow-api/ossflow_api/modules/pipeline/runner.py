@@ -362,6 +362,87 @@ async def run_pipeline(pipeline: PipelineInfo, queue: asyncio.Queue) -> None:
         pmod._refresh_scan_cache_for(pipeline.path)
 
 
+async def run_batch(batch) -> None:
+    """Lanza secuencialmente un pipeline por cada season del batch."""
+    pmod = _shim()
+    batch.status = StepStatus.RUNNING
+    log.info(
+        "[batch %s] starting %d seasons", batch.batch_id, len(batch.paths),
+    )
+
+    for idx, path in enumerate(batch.paths):
+        if pmod._batch_cancel.get(batch.batch_id):
+            log.info(
+                "[batch %s] cancelled before season %d",
+                batch.batch_id, idx + 1,
+            )
+            batch.status = StepStatus.CANCELLED
+            batch.completed_at = datetime.now(timezone.utc).isoformat()
+            return
+
+        batch.current_index = idx
+        log.info(
+            "[batch %s] launching season %d/%d: %s",
+            batch.batch_id, idx + 1, len(batch.paths), path,
+        )
+
+        pipeline, err, _code = pmod._launch_pipeline_internal(
+            path, batch.steps, dict(batch.options),
+        )
+        if err is not None:
+            msg = f"season {idx + 1} launch failed: {err.get('error', err)}"
+            log.warning("[batch %s] %s", batch.batch_id, msg)
+            batch.last_error = msg
+            if not batch.continue_on_fail:
+                batch.status = StepStatus.FAILED
+                batch.completed_at = datetime.now(timezone.utc).isoformat()
+                return
+            continue
+
+        batch.pipeline_ids.append(pipeline.pipeline_id)
+        task = pmod._pipeline_tasks.get(pipeline.pipeline_id)
+        if task is not None:
+            try:
+                await task
+            except asyncio.CancelledError:
+                log.info(
+                    "[batch %s] pipeline %s cancelled",
+                    batch.batch_id, pipeline.pipeline_id,
+                )
+            except Exception as exc:
+                log.exception(
+                    "[batch %s] pipeline %s crashed: %s",
+                    batch.batch_id, pipeline.pipeline_id, exc,
+                )
+
+        final = pmod._pipelines.get(pipeline.pipeline_id)
+        final_status = final.status if final else StepStatus.FAILED
+        log.info(
+            "[batch %s] season %d/%d → %s",
+            batch.batch_id, idx + 1, len(batch.paths), final_status.value,
+        )
+
+        if final_status == StepStatus.FAILED:
+            batch.last_error = f"season {idx + 1} pipeline failed"
+            if not batch.continue_on_fail:
+                batch.status = StepStatus.FAILED
+                batch.completed_at = datetime.now(timezone.utc).isoformat()
+                return
+
+        if pmod._batch_cancel.get(batch.batch_id):
+            batch.status = StepStatus.CANCELLED
+            batch.completed_at = datetime.now(timezone.utc).isoformat()
+            return
+
+    batch.current_index = len(batch.paths)
+    batch.status = StepStatus.COMPLETED
+    batch.completed_at = datetime.now(timezone.utc).isoformat()
+    log.info(
+        "[batch %s] completed all %d seasons",
+        batch.batch_id, len(batch.paths),
+    )
+
+
 def refresh_scan_cache_for(pipeline_path: str) -> None:
     """Re-discover de vídeos en la carpeta del instructional + actualizar cache."""
     try:
