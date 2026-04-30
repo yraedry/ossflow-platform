@@ -144,10 +144,14 @@ async def lifespan(app: FastAPI):
     except Exception as exc:
         log.warning("elevenlabs resume_orphan_jobs failed: %s", exc)
     yield
-    # Shutdown: cerrar httpx.AsyncClient compartido del módulo preflight
+    # Shutdown: cerrar httpx.AsyncClient compartido del módulo preflight.
+    # Acoplamiento #5 roto: app.py ya no toca privados (aclose_shared_client),
+    # invoca el método público del servicio. Cuando app.py migre a
+    # ossflow_api/main.py este hook se registrará vía
+    # infrastructure.lifespan.register_shutdown.
     try:
-        from api.preflight import aclose_shared_client
-        await aclose_shared_client()
+        from ossflow_api.modules.preflight.service import PreflightService
+        await PreflightService.aclose()
     except Exception:
         pass
 
@@ -169,7 +173,7 @@ templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
 # Register routers (E7)
 from ossflow_api.modules.settings import settings_router  # noqa: E402
 from api.pipeline import router as pipeline_router   # noqa: E402
-from api.preflight import router as preflight_router  # noqa: E402
+from ossflow_api.modules.preflight import preflight_router  # noqa: E402
 from ossflow_api.modules.logs import (  # noqa: E402
     install_local_ring_buffer as _install_ring_buffer,
     logs_router,
