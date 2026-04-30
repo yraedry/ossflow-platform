@@ -20,9 +20,10 @@ from pathlib import Path
 from typing import Optional
 
 from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile
-from fastapi.responses import FileResponse, JSONResponse, Response
+from fastapi.responses import FileResponse, JSONResponse, Response, StreamingResponse
 
 from . import filesystem as _fs
+from . import media as _media
 from . import mount as _mount
 from .dependencies import get_library_service
 from .schemas import ScanRequest
@@ -237,3 +238,120 @@ async def api_mount(body: dict):
 @router.get("/api/mount")
 async def api_mount_status():
     return _mount.mount_status()
+
+
+# ---------------------------------------------------------------------------
+# Media (T23.5): video-info, thumbnail, streaming Range-aware
+# ---------------------------------------------------------------------------
+
+
+@router.get("/api/video-info")
+async def api_video_info(path: str):
+    if not Path(path).exists():
+        return JSONResponse({"error": "File not found"}, status_code=404)
+    return _media.video_info(path)
+
+
+@router.get("/api/thumbnail")
+async def api_thumbnail(
+    path: str,
+    t: float = 5.0,
+    svc: LibraryService = Depends(get_library_service),
+):
+    """Genera thumbnail con traducción host→container del path.
+
+    El backend corre en un container que monta ``library_path`` como
+    ``/library``; ``to_container_path`` mapea el path absoluto del NAS
+    a la ruta visible para ffmpeg.
+    """
+    import os as _os
+
+    from api.paths import to_container_path
+
+    try:
+        lib = svc._library_path_loader() or ""
+        container_root = _os.environ.get("MEDIA_ROOT", "/media")
+        container_path = (
+            to_container_path(path, lib, container_root) if lib else path
+        )
+    except ValueError as exc:
+        return JSONResponse({"error": str(exc)}, status_code=400)
+    if not Path(container_path).exists():
+        return JSONResponse({"error": "File not found"}, status_code=404)
+
+    thumb = _media.generate_thumbnail(container_path, t)
+    if thumb:
+        return StreamingResponse(
+            iter([thumb]),
+            media_type="image/jpeg",
+            headers={"Cache-Control": "public, max-age=3600"},
+        )
+    return JSONResponse({"error": "Could not generate thumbnail"}, status_code=500)
+
+
+@router.get("/api/media")
+async def api_media(path: str, request: Request):
+    """Sirve un fichero media (vídeo/subtitle) con HTTP Range para seek."""
+    target = _media.resolve_media_path(path)
+    if target is None:
+        return JSONResponse(
+            {"error": "not found or outside MEDIA_ROOT"}, status_code=404,
+        )
+
+    ext = target.suffix.lower()
+    mime = _media.MEDIA_MIME.get(ext, "application/octet-stream")
+    size = target.stat().st_size
+    range_header = request.headers.get("range") or request.headers.get("Range")
+
+    # Subtitles: serve whole file, convert SRT → VTT on the fly when asked.
+    if ext in (".srt", ".vtt"):
+        if ext == ".srt" and request.query_params.get("as") == "vtt":
+            raw = target.read_text(encoding="utf-8", errors="replace")
+            vtt = "WEBVTT\n\n" + raw.replace(",", ".")
+            return Response(content=vtt, media_type="text/vtt")
+        return FileResponse(path=str(target), media_type=mime)
+
+    # No Range → full file.
+    if not range_header:
+        return FileResponse(
+            path=str(target),
+            media_type=mime,
+            headers={"Accept-Ranges": "bytes", "Content-Length": str(size)},
+        )
+
+    try:
+        units, _, rng = range_header.partition("=")
+        if units.strip().lower() != "bytes":
+            raise ValueError
+        start_s, _, end_s = rng.partition("-")
+        start = int(start_s) if start_s else 0
+        end = int(end_s) if end_s else size - 1
+        if start < 0 or end >= size or start > end:
+            raise ValueError
+    except ValueError:
+        return Response(status_code=416, headers={"Content-Range": f"bytes */{size}"})
+
+    chunk_size = 1024 * 1024
+    length = end - start + 1
+
+    def _iter():
+        with open(target, "rb") as f:
+            f.seek(start)
+            remaining = length
+            while remaining > 0:
+                data = f.read(min(chunk_size, remaining))
+                if not data:
+                    break
+                remaining -= len(data)
+                yield data
+
+    return StreamingResponse(
+        _iter(),
+        status_code=206,
+        media_type=mime,
+        headers={
+            "Content-Range": f"bytes {start}-{end}/{size}",
+            "Accept-Ranges": "bytes",
+            "Content-Length": str(length),
+        },
+    )

@@ -264,66 +264,12 @@ def _persist_job(job: JobInfo) -> None:
 # ---------------------------------------------------------------------------
 
 
-def get_video_info(video_path: str) -> dict:
-    """Get video metadata using ffprobe."""
-    try:
-        cmd = [
-            "ffprobe", "-v", "quiet", "-print_format", "json",
-            "-show_format", "-show_streams", video_path
-        ]
-        result = subprocess.run(cmd, capture_output=True, text=True, timeout=10)
-        if result.returncode == 0:
-            data = json.loads(result.stdout)
-            fmt = data.get("format", {})
-            video_stream = next(
-                (s for s in data.get("streams", []) if s.get("codec_type") == "video"),
-                {}
-            )
-            return {
-                "duration": float(fmt.get("duration", 0)),
-                "duration_formatted": _format_duration(float(fmt.get("duration", 0))),
-                "size_mb": round(int(fmt.get("size", 0)) / (1024 * 1024), 1),
-                "width": int(video_stream.get("width", 0)),
-                "height": int(video_stream.get("height", 0)),
-                "codec": video_stream.get("codec_name", "unknown"),
-                "fps": _parse_fps(video_stream.get("r_frame_rate", "0/1")),
-            }
-    except Exception as e:
-        log.error("ffprobe failed: %s", e)
-    return {"duration": 0, "duration_formatted": "00:00", "size_mb": 0}
-
-
-def generate_thumbnail(video_path: str, time_sec: float = 5.0) -> Optional[bytes]:
-    """Generate a thumbnail from a video at the given timestamp."""
-    try:
-        cmd = [
-            "ffmpeg", "-ss", str(time_sec), "-i", video_path,
-            "-vframes", "1", "-vf", "scale=320:-1",
-            "-f", "image2pipe", "-vcodec", "mjpeg", "-"
-        ]
-        result = subprocess.run(cmd, capture_output=True, timeout=15)
-        if result.returncode == 0 and result.stdout:
-            return result.stdout
-    except Exception:
-        pass
-    return None
-
-
-def _format_duration(seconds: float) -> str:
-    h = int(seconds // 3600)
-    m = int((seconds % 3600) // 60)
-    s = int(seconds % 60)
-    if h > 0:
-        return f"{h}:{m:02d}:{s:02d}"
-    return f"{m}:{s:02d}"
-
-
-def _parse_fps(rate_str: str) -> float:
-    try:
-        num, den = rate_str.split("/")
-        return round(int(num) / int(den), 2) if int(den) > 0 else 0
-    except (ValueError, ZeroDivisionError):
-        return 0
+# T23.5: video metadata + thumbnail viven en modules/library/media.py.
+# Compat shim para pipeline.py (import diferido evita ciclo).
+from ossflow_api.modules.library.media import (  # noqa: E402,F401
+    video_info as get_video_info,
+    generate_thumbnail,
+)
 
 
 # ---------------------------------------------------------------------------
@@ -581,33 +527,6 @@ MEDIA_ROOT = os.environ.get("MEDIA_ROOT", "/media")
 
 
 
-@app.get("/api/video-info")
-async def api_video_info(path: str):
-    if not Path(path).exists():
-        return JSONResponse({"error": "File not found"}, status_code=404)
-    info = get_video_info(path)
-    return info
-
-
-@app.get("/api/thumbnail")
-async def api_thumbnail(path: str, t: float = 5.0):
-    # Translate host path → container path so ffmpeg (running in api container
-    # which mounts library_path as /library) can access the file.
-    try:
-        lib = get_library_path() or ""
-        container_path = to_container_path(path, lib) if lib else path
-    except ValueError as e:
-        return JSONResponse({"error": str(e)}, status_code=400)
-    if not Path(container_path).exists():
-        return JSONResponse({"error": "File not found"}, status_code=404)
-    thumb = generate_thumbnail(container_path, t)
-    if thumb:
-        return StreamingResponse(
-            iter([thumb]),
-            media_type="image/jpeg",
-            headers={"Cache-Control": "public, max-age=3600"}
-        )
-    return JSONResponse({"error": "Could not generate thumbnail"}, status_code=500)
 
 
 @app.post("/api/jobs")
@@ -827,101 +746,6 @@ async def api_search(q: str, limit: int = 50):
         return JSONResponse({"error": str(exc)}, status_code=500)
 
 
-# ---------------------------------------------------------------------------
-# Media streaming (video/subtitles with Range support)
-# ---------------------------------------------------------------------------
-
-_MEDIA_MIME = {
-    ".mp4": "video/mp4",
-    ".m4v": "video/mp4",
-    ".mov": "video/quicktime",
-    ".mkv": "video/x-matroska",
-    ".webm": "video/webm",
-    ".srt": "application/x-subrip",
-    ".vtt": "text/vtt",
-}
-
-
-def _resolve_media_path(path: str) -> Optional[Path]:
-    """Resolve a user-supplied path, ensuring it stays under MEDIA_ROOT."""
-    if not path:
-        return None
-    try:
-        root = Path(MEDIA_ROOT).resolve()
-        target = Path(path).resolve()
-        target.relative_to(root)
-    except (ValueError, OSError):
-        return None
-    if not target.is_file():
-        return None
-    return target
-
-
-@app.get("/api/media")
-async def api_media(path: str, request: Request):
-    """Serve a media file (video/subtitle) with HTTP Range support for seek."""
-    target = _resolve_media_path(path)
-    if target is None:
-        return JSONResponse({"error": "not found or outside MEDIA_ROOT"}, status_code=404)
-
-    ext = target.suffix.lower()
-    mime = _MEDIA_MIME.get(ext, "application/octet-stream")
-    size = target.stat().st_size
-    range_header = request.headers.get("range") or request.headers.get("Range")
-
-    # Subtitles: serve whole file, convert SRT → VTT on the fly when asked.
-    if ext in (".srt", ".vtt"):
-        if ext == ".srt" and request.query_params.get("as") == "vtt":
-            raw = target.read_text(encoding="utf-8", errors="replace")
-            vtt = "WEBVTT\n\n" + raw.replace(",", ".")
-            return Response(content=vtt, media_type="text/vtt")
-        return FileResponse(path=str(target), media_type=mime)
-
-    # No Range → full file.
-    if not range_header:
-        return FileResponse(
-            path=str(target),
-            media_type=mime,
-            headers={"Accept-Ranges": "bytes", "Content-Length": str(size)},
-        )
-
-    # Parse "bytes=start-end"
-    try:
-        units, _, rng = range_header.partition("=")
-        if units.strip().lower() != "bytes":
-            raise ValueError
-        start_s, _, end_s = rng.partition("-")
-        start = int(start_s) if start_s else 0
-        end = int(end_s) if end_s else size - 1
-        if start < 0 or end >= size or start > end:
-            raise ValueError
-    except ValueError:
-        return Response(status_code=416, headers={"Content-Range": f"bytes */{size}"})
-
-    chunk_size = 1024 * 1024
-    length = end - start + 1
-
-    def _iter():
-        with open(target, "rb") as f:
-            f.seek(start)
-            remaining = length
-            while remaining > 0:
-                data = f.read(min(chunk_size, remaining))
-                if not data:
-                    break
-                remaining -= len(data)
-                yield data
-
-    return StreamingResponse(
-        _iter(),
-        status_code=206,
-        media_type=mime,
-        headers={
-            "Content-Range": f"bytes {start}-{end}/{size}",
-            "Accept-Ranges": "bytes",
-            "Content-Length": str(length),
-        },
-    )
 
 
 # ---------------------------------------------------------------------------
