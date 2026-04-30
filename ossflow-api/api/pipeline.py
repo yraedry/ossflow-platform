@@ -95,100 +95,24 @@ def _serialize(p: PipelineInfo) -> dict:
     return _serialize_new(p)
 
 
-import threading
-import time
+# Debounced history save — migrado a modules/pipeline/history.py (T_LATE_2.2).
+# Mantenemos wrappers wrapper a nivel módulo para que los tests sigan
+# parcheando ``pmod._save_history`` y ``pmod.HISTORY_FILE`` directamente.
+from ossflow_api.modules.pipeline import history as _history_mod  # noqa: E402
 
-# Debounce: coalesce bursts of _save_history calls (common during a run with
-# many SSE events) into a single write at most every _SAVE_MIN_INTERVAL
-# seconds. A trailing write is always scheduled so the final state lands on
-# disk. Write runs in a daemon thread so the asyncio loop is never blocked.
-_SAVE_MIN_INTERVAL = 2.0
-_save_lock = threading.Lock()
-_save_last_write = 0.0
-_save_timer: Optional[threading.Timer] = None
+_SAVE_MIN_INTERVAL = _history_mod.SAVE_MIN_INTERVAL
 
 
 def _write_history_sync() -> None:
-    """Actual disk write (runs off the event loop)."""
-    global _save_last_write
-    try:
-        HISTORY_FILE.parent.mkdir(parents=True, exist_ok=True)
-        items = sorted(_pipelines.values(), key=lambda p: p.created_at, reverse=True)[:200]
-        payload = json.dumps([_serialize(p) for p in items], indent=2, ensure_ascii=False)
-        HISTORY_FILE.write_text(payload, encoding="utf-8")
-        _save_last_write = time.monotonic()
-    except OSError as exc:
-        log.warning("Failed to save pipeline history: %s", exc)
+    _history_mod.write_history_sync(_pipelines, HISTORY_FILE)
 
 
 def _save_history() -> None:
-    """Non-blocking, debounced history save.
-
-    Decision: combined *fire-and-forget thread* + *debounce (2 s)*. A single
-    background daemon thread performs the JSON serialization and write, so
-    the event loop is never stalled (diagnosis section 2). Bursty calls are
-    coalesced by scheduling a trailing threading.Timer if the previous write
-    happened < 2 s ago; this collapses dozens of step_progress-triggered
-    saves into one write while guaranteeing the final state reaches disk.
-    """
-    global _save_timer
-    now = time.monotonic()
-    with _save_lock:
-        elapsed = now - _save_last_write
-        if elapsed >= _SAVE_MIN_INTERVAL:
-            # Cancel any pending trailing write — this one supersedes it.
-            if _save_timer is not None:
-                _save_timer.cancel()
-                _save_timer = None
-            threading.Thread(target=_write_history_sync, daemon=True).start()
-        else:
-            # Schedule a single trailing write; drop redundant schedules.
-            if _save_timer is None or not _save_timer.is_alive():
-                delay = _SAVE_MIN_INTERVAL - elapsed
-                t = threading.Timer(delay, _write_history_sync)
-                t.daemon = True
-                _save_timer = t
-                t.start()
+    _history_mod.save_history(_pipelines, HISTORY_FILE)
 
 
 def _load_history() -> None:
-    if not HISTORY_FILE.exists():
-        return
-    try:
-        data = json.loads(HISTORY_FILE.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError) as exc:
-        log.warning("Failed to load pipeline history: %s", exc)
-        return
-    for d in data:
-        steps = [
-            StepInfo(
-                name=s["name"],
-                status=StepStatus(s.get("status", "pending")),
-                progress=s.get("progress", 0.0),
-                message=s.get("message", ""),
-                started_at=s.get("started_at"),
-                completed_at=s.get("completed_at"),
-                diff=s.get("diff"),
-            ) for s in d.get("steps", [])
-        ]
-        p = PipelineInfo(
-            pipeline_id=d["pipeline_id"],
-            path=d["path"],
-            steps=steps,
-            options=d.get("options", {}),
-            status=StepStatus(d.get("status", "pending")),
-            current_step=d.get("current_step", 0),
-            created_at=d.get("created_at", datetime.now(timezone.utc).isoformat()),
-            completed_at=d.get("completed_at"),
-        )
-        # Mark stale running pipelines as failed (server restarted mid-run)
-        if p.status in (StepStatus.RUNNING, StepStatus.PENDING):
-            p.status = StepStatus.FAILED
-            p.completed_at = p.completed_at or datetime.now(timezone.utc).isoformat()
-            for s in p.steps:
-                if s.status == StepStatus.RUNNING:
-                    s.status = StepStatus.FAILED
-        _pipelines[p.pipeline_id] = p
+    _history_mod.load_history(_pipelines, HISTORY_FILE)
 
 
 _load_history()
