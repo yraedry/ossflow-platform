@@ -1,9 +1,8 @@
-"""Tests for logs_view endpoint.
+"""Tests del router del módulo logs.
 
-Nuevo contrato (no usa docker CLI — no está disponible dentro del contenedor
-processor-api):
+Nuevo contrato (no usa docker CLI):
 - ``processor-api``: lee del ring buffer en memoria del propio proceso.
-- resto de servicios: pide al backend via httpx GET {base}/logs.
+- resto de servicios: pide al backend vía httpx GET {base}/logs.
 """
 
 from __future__ import annotations
@@ -14,18 +13,22 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from api import logs_view
+from ossflow_api.modules.logs import logs_router
+from ossflow_api.modules.logs import service as logs_service
+from ossflow_api.modules.logs.service import install_local_ring_buffer
 
 
 @pytest.fixture
 def client():
+    install_local_ring_buffer()
     app = FastAPI()
-    app.include_router(logs_view.router)
+    app.include_router(logs_router)
     return TestClient(app)
 
 
 def _seed_local(logger_name: str = "tests.logs"):
-    logs_view._LOCAL_BUFFER.buffer.clear()
+    assert logs_service._LOCAL_BUFFER is not None
+    logs_service._LOCAL_BUFFER.buffer.clear()
     log = logging.getLogger(logger_name)
     log.setLevel(logging.DEBUG)
     logging.getLogger().setLevel(logging.DEBUG)
@@ -76,11 +79,11 @@ def test_invalid_level_returns_400(client):
 
 
 def test_remote_service_uses_httpx(client, monkeypatch):
-    """Para servicios no locales, se consulta el backend via HTTP."""
     captured: dict = {}
 
     class FakeResp:
         status_code = 200
+
         def json(self):
             return {
                 "service": "chapter-splitter",
@@ -93,7 +96,7 @@ def test_remote_service_uses_httpx(client, monkeypatch):
         captured["params"] = params
         return FakeResp()
 
-    monkeypatch.setattr(logs_view.httpx, "get", fake_get)
+    monkeypatch.setattr(logs_service.httpx, "get", fake_get)
     r = client.get("/api/logs/", params={"service": "chapter-splitter", "tail": 10})
     assert r.status_code == 200
     assert captured["url"].endswith("/logs")
@@ -103,9 +106,11 @@ def test_remote_service_uses_httpx(client, monkeypatch):
 
 def test_remote_backend_unreachable_returns_502(client, monkeypatch):
     import httpx as _httpx
+
     def boom(*a, **kw):
         raise _httpx.ConnectError("nope")
-    monkeypatch.setattr(logs_view.httpx, "get", boom)
+
+    monkeypatch.setattr(logs_service.httpx, "get", boom)
     r = client.get("/api/logs/", params={"service": "chapter-splitter"})
     assert r.status_code == 502
 
@@ -114,6 +119,5 @@ def test_all_level_returns_everything(client):
     _seed_local()
     r = client.get("/api/logs/", params={"service": "processor-api", "level": "ALL"})
     assert r.status_code == 200
-    # ALL es sinónimo de "sin filtro"; incluye INFO, DEBUG, WARNING, ERROR.
     levels = {l["level"] for l in r.json()["lines"]}
     assert {"INFO", "DEBUG", "WARNING", "ERROR"}.issubset(levels)

@@ -170,7 +170,14 @@ templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
 from api.settings import router as settings_router  # noqa: E402
 from api.pipeline import router as pipeline_router   # noqa: E402
 from api.preflight import router as preflight_router  # noqa: E402
-from api.logs_view import router as logs_router  # noqa: E402
+from ossflow_api.modules.logs import (  # noqa: E402
+    install_local_ring_buffer as _install_ring_buffer,
+    logs_router,
+)
+
+# Instalar el ring buffer en import time mantiene el comportamiento previo.
+# La gestión por lifespan se cableará cuando app.py migre a ossflow_api/main.py.
+_install_ring_buffer()
 from api.metrics import router as metrics_router  # noqa: E402
 from api.metadata import router as metadata_router  # noqa: E402
 from api.chapters import router as chapters_router  # noqa: E402
