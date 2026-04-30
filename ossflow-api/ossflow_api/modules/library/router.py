@@ -22,6 +22,8 @@ from typing import Optional
 from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile
 from fastapi.responses import FileResponse, JSONResponse, Response
 
+from . import filesystem as _fs
+from . import mount as _mount
 from .dependencies import get_library_service
 from .schemas import ScanRequest
 from .service import LibraryService, _Forbidden, _NotFound
@@ -171,3 +173,67 @@ async def api_library_poster_redownload(
         msg = str(exc)
         status = 502 if "download failed" in msg else 500
         raise HTTPException(status_code=status, detail=msg)
+
+
+# ---------------------------------------------------------------------------
+# Filesystem browsing (T23.4)
+# ---------------------------------------------------------------------------
+
+
+@router.get("/api/fs/browse")
+async def api_fs_browse(path: str = ""):
+    """Lista subdirectorios bajo ``MEDIA_ROOT`` (anti-traversal)."""
+    try:
+        return _fs.fs_browse(path)
+    except _fs._NoMediaRoot as exc:
+        return JSONResponse({"error": str(exc)}, status_code=503)
+    except _fs._OutOfRoot as exc:
+        return JSONResponse({"error": str(exc)}, status_code=400)
+    except _fs._NotADir as exc:
+        return JSONResponse({"error": str(exc)}, status_code=404)
+    except _fs._NoPermission as exc:
+        return JSONResponse({"error": str(exc)}, status_code=403)
+
+
+@router.get("/api/browse")
+async def api_browse(
+    path: Optional[str] = None,
+    svc: LibraryService = Depends(get_library_service),
+):
+    """Browse libre desde ``library_path`` o ``MEDIA_ROOT``."""
+    try:
+        return _fs.browse(path, svc._library_path_loader)
+    except FileNotFoundError as exc:
+        return JSONResponse({"error": str(exc)}, status_code=404)
+    except _fs._NotADir as exc:
+        return JSONResponse({"error": str(exc)}, status_code=404)
+    except _fs._NoPermission as exc:
+        return JSONResponse({"error": str(exc)}, status_code=403)
+    except OSError as exc:
+        return JSONResponse({"error": f"Error al leer directorio: {exc}"}, status_code=500)
+
+
+# ---------------------------------------------------------------------------
+# NAS mount (T23.4)
+# ---------------------------------------------------------------------------
+
+
+@router.post("/api/mount")
+async def api_mount(body: dict):
+    try:
+        return _mount.mount_share(body)
+    except _mount._BadRequest as exc:
+        return JSONResponse({"error": str(exc)}, status_code=422)
+    except _mount._MountFailed as exc:
+        return JSONResponse(
+            {
+                "error": f"No se pudo montar: {exc}",
+                "hint": "Verifica la IP, la ruta compartida y las credenciales.",
+            },
+            status_code=500,
+        )
+
+
+@router.get("/api/mount")
+async def api_mount_status():
+    return _mount.mount_status()
