@@ -22,12 +22,19 @@ from .cache import (
     find_poster_cached,
     patch_poster_in_cache,
 )
+from .dependencies import get_library_cache, get_library_service
+from .router import router as library_router
+from .service import LibraryService
 
 __all__ = [
     "LibraryCache",
+    "LibraryService",
     "POSTER_NAMES",
     "enrich_with_poster",
     "find_poster",
     "find_poster_cached",
+    "get_library_cache",
+    "get_library_service",
+    "library_router",
     "patch_poster_in_cache",
 ]
