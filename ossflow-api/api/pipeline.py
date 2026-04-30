@@ -131,26 +131,12 @@ from ossflow_api.modules.pipeline.schemas import (  # noqa: F401,E402
 SIDECAR_NAME = ".bjj-meta.json"
 
 
-def _load_oracle_for_path(host_path: str) -> Optional[dict]:
-    """Read oracle data from the instructional's .bjj-meta.json sidecar."""
-    p = Path(host_path)
-    folder = p if p.is_dir() else p.parent
-    sidecar = folder / SIDECAR_NAME
-    if not sidecar.exists():
-        return None
-    try:
-        data = json.loads(sidecar.read_text(encoding="utf-8"))
-        return data.get("oracle") if isinstance(data, dict) else None
-    except (OSError, ValueError) as exc:
-        log.warning("Failed to read oracle from %s: %s", sidecar, exc)
-        return None
-
-
-# La lógica de _load_voice_profile_for_path se movió a
-# ossflow_api/shared/voice_profiles.py para romper el import cruzado privado
-# que hacía dubbing.py (acoplamiento #1 del Plan 2). Mantenemos el alias
-# privado aquí para no obligar a cambiar todos los call sites en este commit.
-from ossflow_api.shared.voice_profiles import (
+# Backend dispatch — migrado a modules/pipeline/backend_dispatch.py
+# (T_LATE_2.4). Re-export con prefijo _ para preservar la API que parchean
+# los tests.
+from ossflow_api.modules.pipeline.backend_dispatch import (  # noqa: E402,F401
+    client_and_payload as _client_and_payload_new,
+    load_oracle_for_path as _load_oracle_for_path,
     load_voice_profile_for_path as _load_voice_profile_for_path,
 )
 
@@ -161,168 +147,11 @@ def _client_and_payload(
     options: dict,
     chained_path: Optional[str] = None,
 ) -> tuple[BackendClient, dict, bool]:
-    """Map a step name to (client, payload, use_oracle) for the target microservice.
-
-    ``chained_path`` — cuando chapters ya creó la Season_NN/, los pasos
-    posteriores (subs/translate/dubbing) deben operar sobre esa carpeta, no
-    sobre el original, porque los capítulos son los ficheros reales a
-    subtitular/doblar. Chapters siempre usa el ``path`` original.
-
-    When ``options["mode"] == "oracle"`` and step is ``chapters``, reads the
-    oracle data from ``.bjj-meta.json`` and returns a payload for ``/run-oracle``.
-    The third element of the returned tuple is ``True`` in that case.
+    """Wrapper de retrocompat — la lógica vive en
+    ``modules/pipeline/backend_dispatch.py``. Tests parchean
+    ``api.pipeline._client_and_payload`` directamente.
     """
-    effective = path if step_name == "chapters" else (chained_path or path)
-    lib = get_library_path() or ""
-    container_path = to_container_path(effective, lib) if lib else effective
-    video_dir = container_path.rsplit("/", 1)[0] if "." in container_path.rsplit("/", 1)[-1] else container_path
-    if not video_dir:
-        video_dir = "/library"
-    # User-supplied output_dir overrides the default (allows non-destructive runs)
-    user_out = options.get("output_dir")
-    if user_out:
-        out_dir = to_container_path(user_out, lib) if lib else user_out
-    else:
-        out_dir = video_dir
-    base = {"input_path": container_path, "output_dir": out_dir}
-
-    if step_name == "chapters":
-        # Oracle mode: read oracle data and use /run-oracle endpoint
-        if options.get("mode") == "oracle":
-            oracle_data = _load_oracle_for_path(path)
-            if oracle_data:
-                return splitter_client(), {
-                    "path": container_path,
-                    "oracle": oracle_data,
-                    "output_dir": out_dir,
-                }, True
-            raise ValueError(
-                f"Oracle mode requested but no oracle data found for '{path}'. "
-                "Run Oracle first from the instructional detail page."
-            )
-
-        return splitter_client(), {
-            **base,
-            "options": {
-                "dry_run": bool(options.get("dry_run", False)),
-                "verbose": True,
-            },
-        }, False
-    if step_name == "subtitles":
-        from api.settings import get_setting
-
-        sub_opts: dict = {"verbose": True}
-        if options.get("force"):
-            sub_opts["force"] = True
-
-        # Optional OpenAI post-process: cleans WhisperX artifacts (syllable
-        # duplication, broken mid-clause boundaries) preserving timestamps.
-        if "postprocess_openai" in options:
-            pp_on = bool(options["postprocess_openai"])
-        else:
-            pp_on = bool(get_setting("subtitle_postprocess_openai"))
-        if pp_on:
-            sub_opts["postprocess_openai"] = True
-            pp_model = options.get("postprocess_model") or get_setting("subtitle_postprocess_model")
-            if pp_model:
-                sub_opts["postprocess_model"] = pp_model
-            pp_key = options.get("postprocess_api_key") or get_setting("openai_api_key")
-            if pp_key:
-                sub_opts["postprocess_api_key"] = pp_key
-
-        return subs_client(), {**base, "options": sub_opts}, False
-    if step_name == "translate":
-        from api.settings import get_setting
-
-        provider = (options.get("provider") or get_setting("translation_provider") or "ollama").lower()
-        fallback = (
-            options.get("fallback_provider")
-            or get_setting("translation_fallback_provider")
-            or ""
-        ).lower() or None
-        model = options.get("model") or get_setting("translation_model")
-
-        topts: dict = {
-            "translate_only": True,
-            "verbose": True,
-            "target_lang": options.get("target_lang", "ES"),
-            "source_lang": options.get("source_lang", "EN"),
-            "provider": provider,
-        }
-        if options.get("force"):
-            topts["force"] = True
-        if model:
-            topts["model"] = model
-        if options.get("formality"):
-            topts["formality"] = options["formality"]
-
-        # Dubbing-adapted track (.dub.es.srt). Explicit option wins; else
-        # pull from global setting. Required so the dubbing step can pick
-        # the speech-anchored SRT (nivel 3) instead of the reading one.
-        if "dubbing_mode" in options:
-            dub_on = bool(options["dubbing_mode"])
-        else:
-            dub_on = bool(get_setting("translation_dubbing_mode"))
-        if dub_on:
-            topts["dubbing_mode"] = True
-            cps = options.get("dubbing_cps") or get_setting("translation_dubbing_cps")
-            if cps:
-                topts["dubbing_cps"] = float(cps)
-
-        key = options.get("api_key") or (
-            get_setting("openai_api_key") if provider == "openai"
-            else None  # ollama no necesita key
-        )
-        if key:
-            topts["api_key"] = key
-
-        if fallback and fallback != provider:
-            fb_key = options.get("fallback_api_key") or (
-                get_setting("openai_api_key") if fallback == "openai"
-                else None  # ollama no necesita key
-            )
-            if fb_key:
-                topts["fallback_provider"] = fallback
-                topts["fallback_api_key"] = fb_key
-
-        return subs_client(), {**base, "options": topts}, False
-    if step_name == "dubbing":
-        from api.settings import get_setting
-        opts: dict = {"skip_translation": True, "tts_engine": "s2pro"}
-        if options.get("force"):
-            opts["force"] = True
-        # S2-Pro es el único motor TTS soportado. Reads its voice exclusively
-        # from the global s2_voice_profile setting (mapped below to
-        # s2_ref_audio_path); the per-instructional voice_profile sidecar es
-        # estado XTTS/ElevenLabs-era y se ignora deliberadamente.
-        voice_basename = (
-            options.get("s2_voice_profile")
-            or get_setting("s2_voice_profile")
-            or "voice_martin_osborne_24k.wav"
-        )
-        opts["s2_ref_audio_path"] = f"/voices/{voice_basename}"
-        ref_text = options.get("s2_ref_text") or get_setting("s2_ref_text")
-        if ref_text:
-            opts["s2_ref_text"] = str(ref_text)
-        for k in ("s2_temperature", "s2_top_p", "s2_top_k", "s2_max_tokens"):
-            v = options.get(k)
-            if v is None:
-                v = get_setting(k)
-            if v is not None:
-                opts[k] = v
-        # Cuantización del modelo GGUF. Resolución: setting (BD) > options >
-        # default q6_k. El dubbing-generator recibe el path absoluto en
-        # s2_gguf_path; el env var S2PRO_GGUF_PATH del compose actúa como
-        # fallback inicial cuando aún no hay setting persistido.
-        quant = (
-            options.get("s2_quantization")
-            or get_setting("s2_quantization")
-            or "q6_k"
-        )
-        opts["s2_gguf_path"] = f"/models/s2pro/s2-pro-{quant}.gguf"
-        opts["s2_quantization"] = quant
-        return dubbing_client(), {**base, "options": opts}, False
-    raise ValueError(f"Unknown step: {step_name}")
+    return _client_and_payload_new(step_name, path, options, chained_path)
 
 
 # Skip-detection y diff — migrados a modules/pipeline/{skip_detector,diff}.py
