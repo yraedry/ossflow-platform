@@ -180,7 +180,7 @@ from ossflow_api.modules.logs import (  # noqa: E402
 _install_ring_buffer()
 from ossflow_api.modules.metrics import metrics_router  # noqa: E402
 from ossflow_api.modules.metadata import metadata_router  # noqa: E402
-from api.chapters import router as chapters_router  # noqa: E402
+from ossflow_api.modules.chapters import chapters_router as chapters_router  # noqa: E402
 from api.cleanup import router as cleanup_router  # noqa: E402
 from api.duplicates import router as duplicates_router  # noqa: E402
 from api.background_jobs import router as bg_jobs_router  # noqa: E402

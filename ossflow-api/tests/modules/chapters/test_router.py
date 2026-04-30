@@ -1,36 +1,26 @@
-"""Tests for /api/chapters/rename."""
+"""Tests del router del módulo chapters."""
 
 from __future__ import annotations
-
-import importlib
 
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
+from ossflow_api.modules.chapters import chapters_router
+from ossflow_api.modules.chapters.dependencies import get_chapters_service
+from ossflow_api.modules.chapters.service import ChaptersService
+
 
 @pytest.fixture
-def client(tmp_path, monkeypatch):
-    config_dir = tmp_path / "config"
-    config_dir.mkdir()
+def client(tmp_path):
     library_dir = tmp_path / "library"
     library_dir.mkdir()
 
-    monkeypatch.setenv("CONFIG_DIR", str(config_dir))
-
-    import api.settings as settings_mod
-    importlib.reload(settings_mod)
-    settings_mod.save_settings(
-        {**settings_mod.load_settings(), "library_path": str(library_dir)}
-    )
-
-    import api.chapters as chapters_mod
-    importlib.reload(chapters_mod)
-
-    # Mount only the chapters router on a minimal app (avoids importing the
-    # full app.py and its heavy deps).
     app = FastAPI()
-    app.include_router(chapters_mod.router)
+    app.include_router(chapters_router)
+    app.dependency_overrides[get_chapters_service] = (
+        lambda: ChaptersService(str(library_dir))
+    )
 
     tc = TestClient(app)
     tc.library_dir = library_dir  # type: ignore[attr-defined]
