@@ -1,6 +1,7 @@
 # Dubbing-generator deps.
-# TTS: ElevenLabs cloud (voice_id pre-registered in dashboard).
-# XTTS-v2 eliminado — usaba coqui-tts + transformers + ~8-10GB de modelos.
+# TTS: S2-Pro (Fish Audio, voice cloning local, backend CUDA) — único motor
+# soportado tras T22.5 (eliminados ElevenLabs/Piper/Kokoro).
+# XTTS-v2 eliminado previamente — usaba coqui-tts + transformers + ~8-10GB.
 --extra-index-url https://download.pytorch.org/whl/cu124
 torch==2.6.0
 torchaudio==2.6.0
@@ -13,18 +14,8 @@ soundfile>=0.12
 # Soft dep of the qa module — if missing the sidecar falls back to MOS-only.
 librosa>=0.10.1
 
-# Cloud TTS backend.
-elevenlabs>=1.0
-
-# Local TTS backend (Piper, ONNX, CPU).
-piper-tts
-
-# Local TTS backend (Kokoro-82M, StyleTTS2, GPU/CPU).
-kokoro>=0.9.4
-
-# Direct dep for SynthesizerS2Pro HTTP client + S2ProServerManager health probe.
-# Currently transitive via elevenlabs/fastapi but pinning makes the contract
-# explicit so a future elevenlabs bump that drops httpx doesn't break s2pro.
+# Cliente HTTP para SynthesizerS2Pro + S2ProServerManager health probe
+# contra el server s2.cpp embebido en el contenedor.
 httpx>=0.27
 
 # Test-only
