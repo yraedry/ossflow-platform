@@ -134,19 +134,6 @@ async def lifespan(app: FastAPI):
     # Startup
     _load_persisted_jobs()
     _auto_mount_on_startup()
-    # Re-attach to ElevenLabs jobs that were mid-flight when we last
-    # stopped. Done after _load_persisted_jobs so the _jobs registry is
-    # populated; before yield so resume tasks start concurrently with
-    # normal request handling.
-    # Acoplamiento #6 cerrado: resume_orphan_jobs es ahora un símbolo público
-    # del módulo elevenlabs (no un detalle de api/elevenlabs_dubbing.py).
-    # Cuando app.py migre a ossflow_api/main.py se registrará vía
-    # infrastructure.lifespan.register_startup.
-    try:
-        from ossflow_api.modules.elevenlabs import resume_orphan_jobs
-        resume_orphan_jobs()
-    except Exception as exc:
-        log.warning("elevenlabs resume_orphan_jobs failed: %s", exc)
     yield
     # Shutdown: cerrar httpx.AsyncClient compartido del módulo preflight.
     # Acoplamiento #5 roto: app.py ya no toca privados (aclose_shared_client),
@@ -198,7 +185,6 @@ from ossflow_api.modules.dubbing import (  # noqa: E402
     burn_subs_router,
     dubbing_router as dubbing_router,
 )
-from ossflow_api.modules.elevenlabs import elevenlabs_router as elevenlabs_dubbing_router  # noqa: E402
 from ossflow_api.modules.promote import promote_router as promote_router  # noqa: E402
 # WIRE_ORACLE_ROUTER
 from ossflow_api.modules.scrapper import scrapper_router  # noqa: E402
@@ -224,7 +210,6 @@ app.include_router(burn_subs_router)
 app.include_router(health_proxy_router)
 app.include_router(subtitles_router)
 app.include_router(dubbing_router)
-app.include_router(elevenlabs_dubbing_router)
 app.include_router(promote_router)
 app.include_router(voices_router)
 app.include_router(export_router)

@@ -432,82 +432,39 @@ def _client_and_payload(
         return subs_client(), {**base, "options": topts}, False
     if step_name == "dubbing":
         from api.settings import get_setting
-        opts: dict = {"skip_translation": True}
+        opts: dict = {"skip_translation": True, "tts_engine": "s2pro"}
         if options.get("force"):
             opts["force"] = True
-        # TTS engine selector — resolved first because it gates whether the
-        # per-instructional voice_profile sidecar applies. S2-Pro reads its
-        # voice exclusively from the global s2_voice_profile setting (mapped
-        # below to s2_ref_audio_path); the per-instructional voice_profile
-        # sidecar is XTTS/ElevenLabs-era state and would silently override
-        # the user's global S2-Pro voice if propagated. Soportados: 's2pro'
-        # (default, local clone), 'elevenlabs' (cloud), 'piper'/'kokoro'
-        # (local preset).
-        engine = options.get("tts_engine") or get_setting("tts_engine") or "s2pro"
-        opts["tts_engine"] = str(engine).strip().lower()
-        if opts["tts_engine"] != "s2pro":
-            # Explicit voice_profile in options wins; else fall back to the
-            # one stored in the instructional's sidecar. Empty = clone
-            # instructor.
-            vp = options.get("voice_profile") or _load_voice_profile_for_path(path)
-            if vp:
-                opts["voice_profile"] = vp
-                opts["use_model_voice"] = True
-            elif options.get("use_model_voice", False):
-                opts["use_model_voice"] = True
-        if opts["tts_engine"] == "elevenlabs":
-            voice_id = (
-                options.get("elevenlabs_voice_id")
-                or get_setting("elevenlabs_voice_id")
-                or ""
-            )
-            if voice_id:
-                opts["elevenlabs_voice_id"] = str(voice_id)
-            model_id = (
-                options.get("elevenlabs_model_id")
-                or get_setting("elevenlabs_model_id")
-                or ""
-            )
-            if model_id:
-                opts["elevenlabs_model_id"] = str(model_id)
-        elif opts["tts_engine"] == "piper":
-            piper_model = (
-                options.get("piper_model_path")
-                or get_setting("piper_model_path")
-                or ""
-            )
-            if piper_model:
-                opts["piper_model_path"] = str(piper_model)
-        elif opts["tts_engine"] == "kokoro":
-            kokoro_voice = (
-                options.get("kokoro_voice")
-                or get_setting("kokoro_voice")
-                or ""
-            )
-            if kokoro_voice:
-                opts["kokoro_voice"] = str(kokoro_voice)
-        elif opts["tts_engine"] == "s2pro":
-            # Build absolute path from the basename stored in settings.
-            voice_basename = (
-                options.get("s2_voice_profile")
-                or get_setting("s2_voice_profile")
-                or "voice_martin_osborne_24k.wav"
-            )
-            opts["s2_ref_audio_path"] = f"/voices/{voice_basename}"
-            ref_text = options.get("s2_ref_text") or get_setting("s2_ref_text")
-            if ref_text:
-                opts["s2_ref_text"] = str(ref_text)
-            for k, default in (
-                ("s2_temperature", 0.8),
-                ("s2_top_p", 0.8),
-                ("s2_top_k", 30),
-                ("s2_max_tokens", 1024),
-            ):
-                v = options.get(k)
-                if v is None:
-                    v = get_setting(k)
-                if v is not None:
-                    opts[k] = v
+        # S2-Pro es el único motor TTS soportado. Reads its voice exclusively
+        # from the global s2_voice_profile setting (mapped below to
+        # s2_ref_audio_path); the per-instructional voice_profile sidecar es
+        # estado XTTS/ElevenLabs-era y se ignora deliberadamente.
+        voice_basename = (
+            options.get("s2_voice_profile")
+            or get_setting("s2_voice_profile")
+            or "voice_martin_osborne_24k.wav"
+        )
+        opts["s2_ref_audio_path"] = f"/voices/{voice_basename}"
+        ref_text = options.get("s2_ref_text") or get_setting("s2_ref_text")
+        if ref_text:
+            opts["s2_ref_text"] = str(ref_text)
+        for k in ("s2_temperature", "s2_top_p", "s2_top_k", "s2_max_tokens"):
+            v = options.get(k)
+            if v is None:
+                v = get_setting(k)
+            if v is not None:
+                opts[k] = v
+        # Cuantización del modelo GGUF. Resolución: setting (BD) > options >
+        # default q6_k. El dubbing-generator recibe el path absoluto en
+        # s2_gguf_path; el env var S2PRO_GGUF_PATH del compose actúa como
+        # fallback inicial cuando aún no hay setting persistido.
+        quant = (
+            options.get("s2_quantization")
+            or get_setting("s2_quantization")
+            or "q6_k"
+        )
+        opts["s2_gguf_path"] = f"/models/s2pro/s2-pro-{quant}.gguf"
+        opts["s2_quantization"] = quant
         return dubbing_client(), {**base, "options": opts}, False
     raise ValueError(f"Unknown step: {step_name}")
 
