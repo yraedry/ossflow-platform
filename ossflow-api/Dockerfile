@@ -11,7 +11,12 @@ COPY ossflow-api/requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt requests
 
 COPY ossflow-api /app
+RUN chmod +x /app/entrypoint.sh
 VOLUME /data
 EXPOSE 8000
 ENV PYTHONPATH=/app
-CMD ["uvicorn", "api.app:app", "--host", "0.0.0.0", "--port", "8000"]
+# El entrypoint ejecuta el script idempotente de migración JSON → SQL
+# antes de lanzar uvicorn. Migra settings.json + background_jobs.json +
+# jobs.json a la BD unificada en cualquier despliegue (incluyendo LXC
+# nuevo o backup restaurado). Sin .json viejos, es no-op de ~100 ms.
+ENTRYPOINT ["/app/entrypoint.sh"]

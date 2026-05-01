@@ -91,12 +91,11 @@ RUN --mount=type=cache,target=/root/.cache/pip \
       \( -name "tests" -o -name "test" -o -name "docs" -o -name "examples" \) \
       -exec rm -rf {} + 2>/dev/null || true
 
-RUN mkdir -p /models/piper && cd /models/piper && \
-    wget -q https://huggingface.co/rhasspy/piper-voices/resolve/main/es/es_ES/sharvard/medium/es_ES-sharvard-medium.onnx && \
-    wget -q https://huggingface.co/rhasspy/piper-voices/resolve/main/es/es_ES/sharvard/medium/es_ES-sharvard-medium.onnx.json
-
-# Pre-cache Kokoro-82M (kept as fallback engine, not the default).
-RUN python3 -c "from kokoro import KPipeline; KPipeline(lang_code='e')" || true
+# Pre-cache de modelos eliminado tras T22.5: Piper y Kokoro ya no están
+# soportados como motores TTS. S2-Pro usa los .gguf montados como volumen
+# (ver docker-compose.yml: /models/s2pro montado desde el host) — no se
+# bakean en la imagen para que el usuario pueda cambiar entre q4_k_m y
+# q6_k sin rebuild.
 
 COPY ossflow-dubbing /app/ossflow-dubbing
 WORKDIR /app/ossflow-dubbing

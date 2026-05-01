@@ -102,9 +102,12 @@ def _run_dubbing_generator(req: RunRequest, emit) -> None:
             use_model_voice = bool(opts.get("use_model_voice"))
             if not use_model_voice and model_voice_path:
                 use_model_voice = Path(model_voice_path).exists()
-        if tts_engine not in ("s2pro", "elevenlabs", "piper", "kokoro"):
+        # Tras T22.5 solo S2-Pro está soportado. Cualquier otro valor se
+        # normaliza a "s2pro" con un log informativo (defensivo: si el API
+        # legacy mandara aún tts_engine="elevenlabs", no rompemos el job).
+        if tts_engine != "s2pro":
             emit(JobEvent(type="log", data={
-                "message": f"unsupported tts_engine={tts_engine!r}, using 's2pro'"
+                "message": f"unsupported tts_engine={tts_engine!r}, falling back to 's2pro'"
             }))
             tts_engine = "s2pro"
 
@@ -113,82 +116,23 @@ def _run_dubbing_generator(req: RunRequest, emit) -> None:
             model_voice_path=model_voice_path,
             tts_engine=tts_engine,
         )
-        if tts_engine == "elevenlabs":
-            if voice_id := opts.get("elevenlabs_voice_id"):
-                config_kwargs["elevenlabs_voice_id"] = str(voice_id)
-            if model_id := opts.get("elevenlabs_model_id"):
-                config_kwargs["elevenlabs_model_id"] = str(model_id)
-            # ElevenLabs produces much cleaner ES than XTTS — no language
-            # hallucination risk, stable prosody per render. Two tunings
-            # that would be unsafe with XTTS pay off here:
-            #   - merge larger blocks → fewer renders → more continuous
-            #     prosody between what were separate SRT slots.
-            #   - longer inter-phrase crossfades → masks the small
-            #     timbre jumps that still exist between cloud renders.
-            # Rationale for the specific values comes from the S01E01
-            # QA: 5 hard_cuts + 5 warnings on 14 boundaries were caused
-            # almost entirely by timbre/F0 jumps and short-gap cuts.
-            # Wider merge caps. ElevenLabs handles 500-char prompts
-            # fluently and the bigger caps mean fewer boundaries — the
-            # S01E01 QA showed that most hard_cuts sat exactly at
-            # boundaries the merger couldn't combine because of char or
-            # gap limits. 1000 ms gap covers the natural pause at end
-            # of sentence when the instructor takes a breath.
-            config_kwargs.setdefault("merge_max_chars", 500)
-            config_kwargs.setdefault("merge_max_gap_ms", 1000)
-            config_kwargs.setdefault("inter_phrase_crossfade_ms", 250)
-            config_kwargs.setdefault("inter_phrase_crossfade_max_gap_ms", 500)
-            config_kwargs.setdefault("force_crossfade_ms", 420)
-            # Tier 3: kept at the same value as force_crossfade_ms.
-            # A first iteration set this to 550 ms — enough to mask a
-            # 10 dB jump perceptually but the longer fade-out made the
-            # next phrase's SRT-anchored start collide with leftover
-            # audio, introducing a 1187 ms silence on a *different*
-            # boundary. The pairwise RMS lift alone already cuts the
-            # raw dB jump (10 → 8 on S01E01) and the standard force
-            # crossfade is enough to hide that residual.
-            config_kwargs.setdefault("rms_jump_crossfade_ms", 420)
-        elif tts_engine == "piper":
-            # Piper is local, deterministic, no hallucination risk. Cadence
-            # is uniform per render so smaller merges are fine, and short
-            # crossfades suffice (no timbre jumps to mask). Castellanize
-            # already runs in the pipeline so EN BJJ terms reach Piper as
-            # ES phonetic spelling.
-            if model_id := opts.get("piper_model_path"):
-                config_kwargs["piper_model_path"] = str(model_id)
-            config_kwargs.setdefault("merge_max_chars", 300)
-            config_kwargs.setdefault("merge_max_gap_ms", 600)
-            config_kwargs.setdefault("inter_phrase_crossfade_ms", 80)
-            config_kwargs.setdefault("force_crossfade_ms", 200)
-            config_kwargs.setdefault("rms_jump_crossfade_ms", 0)
-        elif tts_engine == "kokoro":
-            # Kokoro StyleTTS2: prosodia más natural que Piper, voz preset
-            # ES masculina (em_alex/em_santa). Output 24 kHz nativo. Cadencia
-            # uniforme por render, sin alucinaciones cross-language.
-            if voice := opts.get("kokoro_voice"):
-                config_kwargs["kokoro_voice"] = str(voice)
-            config_kwargs.setdefault("merge_max_chars", 300)
-            config_kwargs.setdefault("merge_max_gap_ms", 600)
-            config_kwargs.setdefault("inter_phrase_crossfade_ms", 100)
-            config_kwargs.setdefault("force_crossfade_ms", 250)
-        elif tts_engine == "s2pro":
-            # S2-Pro local voice clone. Same model + same ref WAV across the
-            # episode → timbre-stable across renders, so no long crossfade
-            # masks needed. merge_max_chars=300 (same as Kokoro) keeps phrases
-            # well under s2.cpp's 800-token degrade threshold while avoiding
-            # fragmentation that would inflate wall-clock time per episode
-            # (~120 s/phrase on the 2060).
-            for k in ("s2_ref_audio_path", "s2_ref_text",
-                      "s2_temperature", "s2_top_p", "s2_top_k",
-                      "s2_max_tokens"):
-                val = opts.get(k)
-                if val is not None:
-                    config_kwargs[k] = val
-            config_kwargs.setdefault("merge_max_chars", 300)
-            config_kwargs.setdefault("merge_max_gap_ms", 600)
-            config_kwargs.setdefault("inter_phrase_crossfade_ms", 100)
-            config_kwargs.setdefault("force_crossfade_ms", 250)
-            config_kwargs.setdefault("rms_jump_crossfade_ms", 0)
+        # S2-Pro local voice clone. Same model + same ref WAV across the
+        # episode → timbre-stable across renders, so no long crossfade
+        # masks needed. merge_max_chars=300 keeps phrases well under
+        # s2.cpp's 800-token degrade threshold while avoiding
+        # fragmentation that would inflate wall-clock time per episode
+        # (~120 s/phrase on the 2060).
+        for k in ("s2_ref_audio_path", "s2_ref_text",
+                  "s2_temperature", "s2_top_p", "s2_top_k",
+                  "s2_max_tokens", "s2_gguf_path"):
+            val = opts.get(k)
+            if val is not None:
+                config_kwargs[k] = val
+        config_kwargs.setdefault("merge_max_chars", 300)
+        config_kwargs.setdefault("merge_max_gap_ms", 600)
+        config_kwargs.setdefault("inter_phrase_crossfade_ms", 100)
+        config_kwargs.setdefault("force_crossfade_ms", 250)
+        config_kwargs.setdefault("rms_jump_crossfade_ms", 0)
 
         config = DubbingConfig(**config_kwargs)
 

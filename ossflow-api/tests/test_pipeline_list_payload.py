@@ -134,10 +134,14 @@ def test_save_history_is_non_blocking():
         _mk_pipeline(f"p{i:03d}", StepStatus.COMPLETED, base + timedelta(minutes=i))
 
     # Reset debounce state so the first call hits the immediate-write path.
-    pmod._save_last_write = 0.0
-    if pmod._save_timer is not None:
-        pmod._save_timer.cancel()
-        pmod._save_timer = None
+    # T_LATE_2.2: el estado de debounce vive ahora en
+    # ``ossflow_api.modules.pipeline.history`` — el shim ``api.pipeline`` ya
+    # no lo expone como atributo (era detalle de implementación, no API).
+    from ossflow_api.modules.pipeline import history as _hist_mod
+    _hist_mod._save_last_write = 0.0
+    if _hist_mod._save_timer is not None:
+        _hist_mod._save_timer.cancel()
+        _hist_mod._save_timer = None
 
     t0 = time.perf_counter()
     for _ in range(20):

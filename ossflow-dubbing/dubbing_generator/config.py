@@ -90,10 +90,10 @@ class DubbingConfig:
     # reportado en E02/E03.
     tts_top_p: float = 0.85
 
-    # Engine selector. Default is 's2pro' (local fish-speech via s2.cpp).
-    # 'elevenlabs' / 'piper' / 'kokoro' are alternative active engines;
-    # 'xtts' fields below are vestigial — kept as dataclass defaults so
-    # external callers don't break, but no synthesizer reads them.
+    # Engine selector. Tras T22.5 solo "s2pro" está soportado; el campo se
+    # conserva como sentinel para que el factory pueda validar invariante
+    # (raise si llega cualquier otro valor) sin tener que romper la firma
+    # de DubbingConfig.
     tts_engine: str = "s2pro"
     xtts_model_name: str = ""
     xtts_config_path: str = ""
@@ -137,61 +137,6 @@ class DubbingConfig:
     # la única configuración que garantiza cero alucinación.
     xtts_code_switching: bool = False
     xtts_en_terms_extra: tuple[str, ...] = ()
-
-    # ------------------------------------------------------------------
-    # ElevenLabs (alternative cloud backend)
-    # ------------------------------------------------------------------
-    # Swap by setting ``tts_engine = "elevenlabs"``. API key is read from
-    # ``ELEVENLABS_API_KEY`` env var; voice_id is the pre-cloned speaker
-    # registered in the ElevenLabs dashboard (PVC / IVC). Unlike XTTS,
-    # reference_wav is ignored — the cloned voice lives on the provider.
-    elevenlabs_voice_id: str = "LlZr3QuzbW4WrPjgATHG"
-    elevenlabs_model_id: str = "eleven_multilingual_v2"
-    elevenlabs_stability: float = 0.5
-    elevenlabs_similarity_boost: float = 0.75
-    elevenlabs_style: float = 0.0
-    elevenlabs_use_speaker_boost: bool = True
-    # Output at 24 kHz PCM to match XTTS sample rate → the rest of the
-    # audio pipeline (mixer, stretcher, demucs) needs no change.
-    elevenlabs_output_format: str = "pcm_24000"
-    elevenlabs_api_key_env: str = "ELEVENLABS_API_KEY"
-    # HTTP timeout per request (seconds). Phrases are short so 60 s is
-    # generous; dubbing 2000-char episodes splits into ~30-50 calls.
-    elevenlabs_request_timeout: float = 60.0
-
-    # ------------------------------------------------------------------
-    # Piper (local ONNX TTS, free, no cloning)
-    # ------------------------------------------------------------------
-    # Spanish male voice from rhasspy/piper-voices. The model is baked
-    # into the dubbing-generator image at build time. ``length_scale``
-    # controls cadence (1.0 = native pace, >1 slower, <1 faster).
-    # ``noise_scale`` and ``noise_w`` control prosodic variability.
-    #
-    # Defaults tuneados para narración BJJ:
-    # - length_scale 0.95: cadencia ~5% más rápida que el default. El
-    #   default 1.0 mete pausas demasiado largas; <0.9 sonaba apresurado
-    #   y robótico.
-    # - noise_scale 0.75 (antes 0.667): más variación tonal — el default
-    #   sonaba "gangoso" en Piper-sharvard porque la prosodia era muy
-    #   plana. Subirlo aporta naturalidad orgánica al precio de leve
-    #   inestabilidad ocasional (aceptable en narración).
-    # - noise_w 0.85 (antes 0.6): variación de duración fonética cercana
-    #   al default Piper. Bajarlo demasiado homogeniza las pausas entre
-    #   palabras y suena robótico.
-    piper_model_path: str = "/models/piper/es_ES-sharvard-medium.onnx"
-    piper_length_scale: float = 0.95
-    piper_noise_scale: float = 0.75
-    piper_noise_w: float = 0.85
-
-    # ------------------------------------------------------------------
-    # Kokoro-82M (local StyleTTS2, voz preset ES, gratis, mejor prosodia)
-    # ------------------------------------------------------------------
-    # ``em_alex`` y ``em_santa`` son las dos voces masculinas ES nativas.
-    # Output 24 kHz mono nativo (no requiere resample).
-    # speed=1.0 default; <1 más lento, >1 más rápido.
-    kokoro_lang_code: str = "e"           # Spanish
-    kokoro_voice: str = "em_alex"
-    kokoro_speed: float = 1.0
 
     # ------------------------------------------------------------------
     # Fish Audio S2-Pro (local CUDA voice-clone TTS)

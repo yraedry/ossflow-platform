@@ -11,7 +11,10 @@ from dubbing_generator.tts.s2pro_server_manager import S2ProServerManager
 
 
 def test_skips_when_engine_not_s2pro():
-    cfg = DubbingConfig(tts_engine="kokoro")
+    """Defensivo: si llega un tts_engine != 's2pro' (no debería tras T22.5
+    porque el factory lo rechaza, pero el server manager queda como
+    segunda barrera) el manager no arranca el subproceso."""
+    cfg = DubbingConfig(tts_engine="other")
     m = S2ProServerManager(cfg)
     with patch("subprocess.Popen") as popen:
         m.start()
