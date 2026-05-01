@@ -67,19 +67,13 @@ class AnalyzeRequest(BaseModel):
     model: str = "large-v3"
 
 
-_regenerator: object | None = None
-
-
-def _get_regenerator(model: str, language: str):
-    global _regenerator
-    from subtitle_generator.config import TranscriptionConfig  # type: ignore
-    from subtitle_generator.segment_regen import SegmentRegenerator  # type: ignore
-
-    if _regenerator is None:
-        _regenerator = SegmentRegenerator(
-            TranscriptionConfig(model_name=model, language=language)
-        )
-    return _regenerator
+# Regenerator — migrado a subtitle_generator/core/regenerator.py (T31.2).
+# El global ``_regenerator`` ha sido eliminado a favor de ``lru_cache`` por
+# (model, language). Esto permite tests aislados (cache_clear) y evita el
+# anti-patrón Singleton module-level.
+from subtitle_generator.core.regenerator import (  # noqa: F401,E402
+    get_regenerator as _get_regenerator,
+)
 
 
 # Path helpers — migrados a subtitle_generator/shared/paths.py (T31.1).
