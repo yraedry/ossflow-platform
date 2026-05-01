@@ -1,8 +1,4 @@
-"""Endpoints HTTP del módulo scrapper.
-
-Prefix HTTP ``/api/oracle`` preservado para no romper el frontend
-(decisión de spec: rename interno-only).
-"""
+"""Endpoints HTTP del módulo scrapper."""
 
 from __future__ import annotations
 
@@ -16,7 +12,7 @@ from ossflow_api.shared.exceptions import ApiError
 from .dependencies import get_scrapper_service
 from .service import ScrapperService
 
-router = APIRouter(prefix="/api/oracle", tags=["oracle"])
+router = APIRouter(prefix="/api/scrapper", tags=["scrapper"])
 
 
 def _to_http(exc: ApiError) -> HTTPException:

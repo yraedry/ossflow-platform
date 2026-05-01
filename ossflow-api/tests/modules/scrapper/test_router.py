@@ -93,7 +93,7 @@ def test_providers_happy(env, monkeypatch):
         return httpx.Response(200, json=body)
 
     _patch_httpx(monkeypatch, handler)
-    r = env["client"].get("/api/oracle/providers")
+    r = env["client"].get("/api/scrapper/providers")
     assert r.status_code == 200
     assert r.json() == body
 
@@ -103,7 +103,7 @@ def test_providers_backend_500(env, monkeypatch):
         return httpx.Response(500, text="boom")
 
     _patch_httpx(monkeypatch, handler)
-    r = env["client"].get("/api/oracle/providers")
+    r = env["client"].get("/api/scrapper/providers")
     assert r.status_code == 502
 
 
@@ -112,7 +112,7 @@ def test_providers_invalid_json(env, monkeypatch):
         return httpx.Response(200, text="<html>not json</html>")
 
     _patch_httpx(monkeypatch, handler)
-    r = env["client"].get("/api/oracle/providers")
+    r = env["client"].get("/api/scrapper/providers")
     assert r.status_code == 502
 
 
@@ -122,7 +122,7 @@ def test_providers_invalid_json(env, monkeypatch):
 
 
 def test_get_oracle_404_when_no_meta(env):
-    r = env["client"].get(f"/api/oracle/{env['encoded_path']}")
+    r = env["client"].get(f"/api/scrapper/{env['encoded_path']}")
     assert r.status_code == 404
 
 
@@ -135,14 +135,14 @@ def test_get_oracle_returns_cached(env):
     (env["instructional"] / ".bjj-meta.json").write_text(
         json.dumps({"oracle": oracle})
     )
-    r = env["client"].get(f"/api/oracle/{env['encoded_path']}")
+    r = env["client"].get(f"/api/scrapper/{env['encoded_path']}")
     assert r.status_code == 200
     assert r.json() == oracle
 
 
 def test_get_oracle_path_traversal_denied(env):
     bad = quote("/etc/passwd", safe="")
-    r = env["client"].get(f"/api/oracle/{bad}")
+    r = env["client"].get(f"/api/scrapper/{bad}")
     assert r.status_code in (403, 404)
 
 
@@ -161,7 +161,7 @@ def test_resolve_proxies_with_derived_title_author(env, monkeypatch):
 
     _patch_httpx(monkeypatch, handler)
     r = env["client"].post(
-        f"/api/oracle/{env['encoded_path']}/resolve",
+        f"/api/scrapper/{env['encoded_path']}/resolve",
         json={"provider_id": "bjjfanatics"},
     )
     assert r.status_code == 200
@@ -184,7 +184,7 @@ def test_resolve_uses_meta_when_available(env, monkeypatch):
 
     _patch_httpx(monkeypatch, handler)
     r = env["client"].post(
-        f"/api/oracle/{env['encoded_path']}/resolve", json={}
+        f"/api/scrapper/{env['encoded_path']}/resolve", json={}
     )
     assert r.status_code == 200
     assert captured["body"]["author"] == "Gordon"
@@ -198,7 +198,7 @@ def test_resolve_backend_error(env, monkeypatch):
 
     _patch_httpx(monkeypatch, handler)
     r = env["client"].post(
-        f"/api/oracle/{env['encoded_path']}/resolve", json={}
+        f"/api/scrapper/{env['encoded_path']}/resolve", json={}
     )
     assert r.status_code == 502
 
@@ -234,7 +234,7 @@ def test_scrape_persists_to_meta(env, monkeypatch):
 
     _patch_httpx(monkeypatch, handler)
     r = env["client"].post(
-        f"/api/oracle/{env['encoded_path']}/scrape",
+        f"/api/scrapper/{env['encoded_path']}/scrape",
         json={"url": "https://bjjfanatics.com/products/foo"},
     )
     assert r.status_code == 200
@@ -247,7 +247,7 @@ def test_scrape_persists_to_meta(env, monkeypatch):
 
 def test_scrape_missing_url(env):
     r = env["client"].post(
-        f"/api/oracle/{env['encoded_path']}/scrape", json={}
+        f"/api/scrapper/{env['encoded_path']}/scrape", json={}
     )
     assert r.status_code == 422
 
@@ -258,7 +258,7 @@ def test_scrape_backend_404(env, monkeypatch):
 
     _patch_httpx(monkeypatch, handler)
     r = env["client"].post(
-        f"/api/oracle/{env['encoded_path']}/scrape",
+        f"/api/scrapper/{env['encoded_path']}/scrape",
         json={"url": "https://x"},
     )
     assert r.status_code == 502
@@ -270,7 +270,7 @@ def test_scrape_backend_invalid_json(env, monkeypatch):
 
     _patch_httpx(monkeypatch, handler)
     r = env["client"].post(
-        f"/api/oracle/{env['encoded_path']}/scrape",
+        f"/api/scrapper/{env['encoded_path']}/scrape",
         json={"url": "https://x"},
     )
     assert r.status_code == 502
@@ -282,7 +282,7 @@ def test_scrape_invalid_oracle_shape(env, monkeypatch):
 
     _patch_httpx(monkeypatch, handler)
     r = env["client"].post(
-        f"/api/oracle/{env['encoded_path']}/scrape",
+        f"/api/scrapper/{env['encoded_path']}/scrape",
         json={"url": "https://x"},
     )
     assert r.status_code == 422
@@ -295,7 +295,7 @@ def test_scrape_invalid_oracle_shape(env, monkeypatch):
 
 def test_put_persists_oracle(env):
     r = env["client"].put(
-        f"/api/oracle/{env['encoded_path']}", json=VALID_ORACLE
+        f"/api/scrapper/{env['encoded_path']}", json=VALID_ORACLE
     )
     assert r.status_code == 200
     meta = json.loads((env["instructional"] / ".bjj-meta.json").read_text())
@@ -307,7 +307,7 @@ def test_put_persists_oracle(env):
 
 def test_put_rejects_invalid_payload(env):
     r = env["client"].put(
-        f"/api/oracle/{env['encoded_path']}",
+        f"/api/scrapper/{env['encoded_path']}",
         json={
             "product_url": "x",
             "scraped_at": "y",
@@ -319,7 +319,7 @@ def test_put_rejects_invalid_payload(env):
 
 def test_put_invalid_json_body(env):
     r = env["client"].put(
-        f"/api/oracle/{env['encoded_path']}",
+        f"/api/scrapper/{env['encoded_path']}",
         content=b"not json",
         headers={"content-type": "application/json"},
     )
@@ -343,7 +343,7 @@ def test_delete_preserves_other_fields(env):
             }
         )
     )
-    r = env["client"].delete(f"/api/oracle/{env['encoded_path']}")
+    r = env["client"].delete(f"/api/scrapper/{env['encoded_path']}")
     assert r.status_code == 200
     meta = json.loads((env["instructional"] / ".bjj-meta.json").read_text())
     assert "oracle" not in meta
@@ -355,12 +355,12 @@ def test_delete_preserves_other_fields(env):
 
 
 def test_delete_when_no_meta_is_ok(env):
-    r = env["client"].delete(f"/api/oracle/{env['encoded_path']}")
+    r = env["client"].delete(f"/api/scrapper/{env['encoded_path']}")
     assert r.status_code == 200
     assert not (env["instructional"] / ".bjj-meta.json").exists()
 
 
 def test_delete_unknown_instructional_404(env):
     bad = quote(str(env["library"] / "does-not-exist"), safe="")
-    r = env["client"].delete(f"/api/oracle/{bad}")
+    r = env["client"].delete(f"/api/scrapper/{bad}")
     assert r.status_code == 404

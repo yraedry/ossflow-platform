@@ -175,7 +175,6 @@ from ossflow_api.modules.dubbing import (  # noqa: E402
     dubbing_router as dubbing_router,
 )
 from ossflow_api.modules.promote import promote_router as promote_router  # noqa: E402
-# WIRE_ORACLE_ROUTER
 from ossflow_api.modules.scrapper import scrapper_router  # noqa: E402
 from ossflow_api.modules.voices import voices_router  # noqa: E402
 from ossflow_api.modules.export import export_router  # noqa: E402
@@ -204,7 +203,6 @@ app.include_router(promote_router)
 app.include_router(voices_router)
 app.include_router(export_router)
 app.include_router(library_router)
-# WIRE_ORACLE_ROUTER
 app.include_router(scrapper_router)
 # WIRE_TELEGRAM_ROUTER
 app.include_router(telegram_router)
