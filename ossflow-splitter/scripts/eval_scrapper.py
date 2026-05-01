@@ -1,8 +1,8 @@
-"""CLI eval: verifies the BJJFanatics oracle flow end-to-end on a known product.
+"""CLI eval: verifies the BJJFanatics scrapper flow end-to-end on a known product.
 
 Usage (inside the `chapter-splitter` container):
 
-    python -m scripts.eval_oracle \
+    python -m scripts.eval_scrapper \
         --title "Tripod Passing" \
         --author "Jozef Chen" \
         --instructional-dir "/media/instruccionales/Tripod Passing - Jozef Chen" \
@@ -12,7 +12,7 @@ Exit codes:
     0 - all checks PASS
     1 - one or more checks FAIL
     2 - no search candidate above min_score threshold
-    3 - oracle structural checks failed (wrong volumes/chapters/timestamps)
+    3 - scrape structural checks failed (wrong volumes/chapters/timestamps)
 """
 
 from __future__ import annotations
@@ -25,7 +25,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable, Optional
 
-logger = logging.getLogger("eval_oracle")
+logger = logging.getLogger("eval_scrapper")
 
 MIN_CANDIDATE_SCORE = 0.7
 
@@ -49,8 +49,8 @@ def _fmt_ts(s: float) -> str:
 
 def _parse_args() -> argparse.Namespace:
     p = argparse.ArgumentParser(
-        prog="eval_oracle",
-        description="Verify BJJFanatics oracle flow on Tripod Passing - Jozef Chen.",
+        prog="eval_scrapper",
+        description="Verify BJJFanatics scrapper flow on Tripod Passing - Jozef Chen.",
     )
     p.add_argument("--title", required=True)
     p.add_argument("--author", required=True)
@@ -62,7 +62,7 @@ def _parse_args() -> argparse.Namespace:
     p.add_argument(
         "--dry-run",
         action="store_true",
-        help="Do not run OracleSplitter.split(); only verify oracle data.",
+        help="Do not run ChapterSplitter.split(); only verify scrape data.",
     )
     p.add_argument(
         "--log-level",
@@ -73,11 +73,11 @@ def _parse_args() -> argparse.Namespace:
 
 
 def _run_search(provider, title: str, author: str, checks: list[Check]) -> Optional[object]:
-    from chapter_splitter.scrapper import OracleError
+    from chapter_splitter.scrapper import ScraperError
 
     try:
         candidates = provider.search(title, author)
-    except OracleError as e:
+    except ScraperError as e:
         checks.append(Check("search() returns candidates", False, f"{type(e).__name__}: {e}"))
         return None
 
@@ -101,13 +101,13 @@ def _run_search(provider, title: str, author: str, checks: list[Check]) -> Optio
     return top if ok else None
 
 
-def _verify_oracle(oracle, checks: list[Check]) -> bool:
+def _verify_scrape(scrape, checks: list[Check]) -> bool:
     """Apply all Tripod Passing structural expectations. Returns True if all OK."""
     all_ok = True
 
-    n_vols = len(oracle.volumes)
-    print(f"\nOracle summary: {n_vols} volumes, provider={oracle.provider_id}")
-    for v in oracle.volumes:
+    n_vols = len(scrape.volumes)
+    print(f"\nScrape summary: {n_vols} volumes, provider={scrape.provider_id}")
+    for v in scrape.volumes:
         print(
             f"  Volume {v.number}: {len(v.chapters)} chapters, "
             f"total={_fmt_ts(v.total_duration_s)} ({v.total_duration_s:.1f}s)"
@@ -117,7 +117,7 @@ def _verify_oracle(oracle, checks: list[Check]) -> bool:
     checks.append(c)
     all_ok &= c.ok
 
-    vol1 = oracle.volume(1)
+    vol1 = scrape.volume(1)
     if vol1 is None:
         checks.append(Check("Volume 1 present", False, "missing"))
         return False
@@ -152,7 +152,7 @@ def _verify_oracle(oracle, checks: list[Check]) -> bool:
     # Per-volume duration + monotonic starts.
     dur_ok = True
     mono_ok = True
-    for v in oracle.volumes:
+    for v in scrape.volumes:
         if v.total_duration_s <= 0:
             dur_ok = False
             logger.error("Volume %d has total_duration_s <= 0", v.number)
@@ -171,7 +171,7 @@ def _verify_oracle(oracle, checks: list[Check]) -> bool:
     return all_ok
 
 
-def _persist_oracle(instructional_dir: Path, oracle) -> None:
+def _persist_scrape(instructional_dir: Path, scrape) -> None:
     meta_file = instructional_dir / ".bjj-meta.json"
     data: dict = {}
     if meta_file.exists():
@@ -180,16 +180,18 @@ def _persist_oracle(instructional_dir: Path, oracle) -> None:
         except Exception:
             logger.warning("Could not parse existing %s, overwriting", meta_file)
             data = {}
-    data["oracle"] = json.loads(oracle.model_dump_json())
+    # Sidecar JSON key ``oracle`` se preserva por compat con ossflow-api y
+    # con .bjj-meta.json ya persistidos en NAS de usuarios.
+    data["oracle"] = json.loads(scrape.model_dump_json())
     meta_file.parent.mkdir(parents=True, exist_ok=True)
     meta_file.write_text(json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8")
-    logger.info("Persisted oracle to %s", meta_file)
+    logger.info("Persisted scrape result to %s", meta_file)
 
 
-def _run_split(instructional_dir: Path, oracle, checks: list[Check]) -> None:
-    from chapter_splitter.splitting.oracle_splitter import OracleSplitter
+def _run_split(instructional_dir: Path, scrape, checks: list[Check]) -> None:
+    from chapter_splitter.splitting.chapter_splitter import ChapterSplitter
 
-    splitter = OracleSplitter(instructional_dir=instructional_dir, oracle=oracle)
+    splitter = ChapterSplitter(instructional_dir=instructional_dir, scrape_result=scrape)
 
     def _progress(pct: float, msg: str) -> None:
         print(f"  [{pct:5.1f}%] {msg}")
@@ -219,12 +221,12 @@ def main() -> int:
         format="%(levelname)s %(name)s: %(message)s",
     )
 
-    from chapter_splitter.scrapper import OracleError, discover, registry
+    from chapter_splitter.scrapper import ScraperError, discover, registry
 
     discover()
     try:
         provider = registry.get("bjjfanatics")
-    except OracleError as e:
+    except ScraperError as e:
         print(f"ERROR resolving provider: {type(e).__name__}: {e}", file=sys.stderr)
         return 1
 
@@ -236,31 +238,31 @@ def main() -> int:
         return 2
 
     try:
-        oracle = provider.scrape(top.url)
-    except OracleError as e:
+        scrape = provider.scrape(top.url)
+    except ScraperError as e:
         print(f"ERROR scraping {top.url}: {type(e).__name__}: {e}", file=sys.stderr)
         checks.append(Check("scrape() succeeds", False, f"{type(e).__name__}: {e}"))
         _print_summary(checks)
         return 1
     checks.append(Check("scrape() succeeds", True))
 
-    oracle_ok = _verify_oracle(oracle, checks)
-    if not oracle_ok:
+    scrape_ok = _verify_scrape(scrape, checks)
+    if not scrape_ok:
         _print_summary(checks)
         return 3
 
     instructional_dir = Path(args.instructional_dir)
-    # Persist oracle regardless of dry-run so the frontend can read it.
+    # Persist scrape result regardless of dry-run so the frontend can read it.
     if instructional_dir.exists():
         try:
-            _persist_oracle(instructional_dir, oracle)
-            checks.append(Check(".bjj-meta.json updated with oracle", True))
+            _persist_scrape(instructional_dir, scrape)
+            checks.append(Check(".bjj-meta.json updated with scrape result", True))
         except Exception as e:
-            checks.append(Check(".bjj-meta.json updated with oracle", False, str(e)))
+            checks.append(Check(".bjj-meta.json updated with scrape result", False, str(e)))
     else:
         checks.append(
             Check(
-                ".bjj-meta.json updated with oracle",
+                ".bjj-meta.json updated with scrape result",
                 False,
                 f"instructional dir missing: {instructional_dir}",
             )
@@ -273,12 +275,12 @@ def main() -> int:
             )
         else:
             try:
-                _run_split(instructional_dir, oracle, checks)
+                _run_split(instructional_dir, scrape, checks)
             except Exception as e:
                 logger.exception("split failed")
                 checks.append(Check("Splitter run", False, f"{type(e).__name__}: {e}"))
     else:
-        print("\n(dry-run: skipping OracleSplitter.split())")
+        print("\n(dry-run: skipping ChapterSplitter.split())")
 
     return _print_summary(checks)
 

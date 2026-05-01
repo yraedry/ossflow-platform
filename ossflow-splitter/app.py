@@ -69,7 +69,7 @@ app = create_app(service_name=SERVICE_NAME, task_fn=_run_chapter_splitter)
 
 
 # ---------------------------------------------------------------------------
-# Oracle HTTP endpoints (search / scrape / providers)
+# Scrapper HTTP endpoints (search / scrape / providers)
 # Consumed by processor-api as proxy.
 # ---------------------------------------------------------------------------
 
@@ -77,16 +77,16 @@ from fastapi import HTTPException as _HTTPException  # noqa: E402
 from pydantic import BaseModel as _BaseModel  # noqa: E402
 
 from chapter_splitter.scrapper import (  # noqa: E402
-    OracleError,
+    ScraperError,
     ProviderNotFoundError,
     ProviderScrapeError,
     ProviderSearchError,
     ProviderTimeoutError,
-    discover as _oracle_discover,
-    registry as _oracle_registry,
+    discover as _scrapper_discover,
+    registry as _scrapper_registry,
 )
 
-_oracle_discover()
+_scrapper_discover()
 
 
 class _SearchReq(_BaseModel):
@@ -100,28 +100,28 @@ class _ScrapeReq(_BaseModel):
     provider_id: str | None = None
 
 
-@app.get("/oracle/providers")
-def list_oracle_providers() -> list[dict]:
+@app.get("/scrapper/providers")
+def list_scrapper_providers() -> list[dict]:
     return [
         {"id": p.id, "display_name": p.display_name, "domains": list(p.domains)}
-        for p in _oracle_registry.all()
+        for p in _scrapper_registry.all()
     ]
 
 
-@app.post("/oracle/search")
-def oracle_search(req: _SearchReq) -> list[dict]:
+@app.post("/scrapper/search")
+def scrapper_search(req: _SearchReq) -> list[dict]:
     try:
         if req.provider_id:
-            providers = [_oracle_registry.get(req.provider_id)]
+            providers = [_scrapper_registry.get(req.provider_id)]
         else:
-            providers = _oracle_registry.all()
+            providers = _scrapper_registry.all()
         if not providers:
-            raise _HTTPException(status_code=503, detail="no oracle providers registered")
+            raise _HTTPException(status_code=503, detail="no scrapper providers registered")
         all_candidates: list = []
         for p in providers:
             try:
                 all_candidates.extend(p.search(req.title, req.author))
-            except OracleError as exc:
+            except ScraperError as exc:
                 logging.getLogger(__name__).warning(
                     "provider %s search failed: %s", p.id, exc
                 )
@@ -135,13 +135,13 @@ def oracle_search(req: _SearchReq) -> list[dict]:
         raise _HTTPException(status_code=502, detail=str(exc))
 
 
-@app.post("/oracle/scrape")
-def oracle_scrape(req: _ScrapeReq) -> dict:
+@app.post("/scrapper/scrape")
+def scrapper_scrape(req: _ScrapeReq) -> dict:
     try:
         provider = (
-            _oracle_registry.get(req.provider_id)
+            _scrapper_registry.get(req.provider_id)
             if req.provider_id
-            else _oracle_registry.resolve_by_url(req.url)
+            else _scrapper_registry.resolve_by_url(req.url)
         )
         result = provider.scrape(req.url)
         return result.model_dump()
@@ -154,9 +154,9 @@ def oracle_scrape(req: _ScrapeReq) -> dict:
 
 
 # ---------------------------------------------------------------------------
-# Oracle endpoint: cut by BJJFanatics-scraped timestamps
+# Scrapper endpoint: cut by BJJFanatics-scraped timestamps
 # ---------------------------------------------------------------------------
-# WIRE_ORACLE_RUN_ENDPOINT  (added inline below; no central wiring required)
+# WIRE_SCRAPE_RUN_ENDPOINT  (added inline below; no central wiring required)
 
 from typing import Any  # noqa: E402
 
@@ -167,16 +167,16 @@ from pydantic import BaseModel  # noqa: E402
 from ossflow_service_kit.events import sse_generator  # noqa: E402
 
 
-class OracleRunRequest(BaseModel):
+class RunScrapeRequest(BaseModel):
     path: str
-    oracle: dict[str, Any]
+    scrape_data: dict[str, Any]
     output_dir: str | None = None
 
 
-def _run_oracle_task(req: OracleRunRequest, emit) -> None:
-    from chapter_splitter.scrapper.models import OracleResult  # type: ignore
-    from chapter_splitter.splitting.oracle_splitter import (  # type: ignore
-        OracleSplitter,
+def _run_scrape_task(req: RunScrapeRequest, emit) -> None:
+    from chapter_splitter.scrapper.models import ScrapeResult  # type: ignore
+    from chapter_splitter.splitting.chapter_splitter import (  # type: ignore
+        ChapterSplitter,
     )
 
     instructional_dir = Path(req.path)
@@ -185,7 +185,7 @@ def _run_oracle_task(req: OracleRunRequest, emit) -> None:
     if not instructional_dir.exists() or not instructional_dir.is_dir():
         raise FileNotFoundError(f"Directory does not exist: {instructional_dir}")
 
-    oracle = OracleResult.model_validate(req.oracle)
+    scrape = ScrapeResult.model_validate(req.scrape_data)
     output_dir = Path(req.output_dir) if req.output_dir else None
 
     def progress_cb(pct: float, message: str) -> None:
@@ -194,11 +194,11 @@ def _run_oracle_task(req: OracleRunRequest, emit) -> None:
     with emit_logs(emit, level=logging.INFO):
         emit(JobEvent(
             type="log",
-            data={"message": f"oracle-split starting on {instructional_dir}"},
+            data={"message": f"scrape-split starting on {instructional_dir}"},
         ))
-        splitter = OracleSplitter(
+        splitter = ChapterSplitter(
             instructional_dir=instructional_dir,
-            oracle=oracle,
+            scrape_result=scrape,
             output_dir=output_dir,
         )
         report = splitter.split(progress_cb=progress_cb)
@@ -212,12 +212,14 @@ def _run_oracle_task(req: OracleRunRequest, emit) -> None:
         ))
 
 
-@app.post("/run-oracle")
-def run_oracle(req: OracleRunRequest) -> dict[str, str]:
-    """Submit an oracle-driven split job. Mirrors POST /run."""
+@app.post("/run-scrape")
+def run_scrape(req: RunScrapeRequest) -> dict[str, str]:
+    """Submit a scrape-driven split job. Mirrors POST /run."""
     log = logging.getLogger(__name__)
-    log.info("run-oracle request: path=%s, oracle_keys=%s, output_dir=%s",
-             req.path, list(req.oracle.keys()) if req.oracle else None, req.output_dir)
+    log.info("run-scrape request: path=%s, scrape_data_keys=%s, output_dir=%s",
+             req.path,
+             list(req.scrape_data.keys()) if req.scrape_data else None,
+             req.output_dir)
     if not req.path:
         raise HTTPException(status_code=400, detail="path is required")
     p = Path(req.path)
@@ -239,16 +241,16 @@ def run_oracle(req: OracleRunRequest) -> dict[str, str]:
 
     def target() -> None:
         try:
-            _run_oracle_task(req, emit)
+            _run_scrape_task(req, emit)
             emit(JobEvent(type="done", data={"job_id": job_id}))
         except Exception as exc:  # noqa: BLE001
-            log.exception("oracle job %s failed", job_id)
+            log.exception("scrape job %s failed", job_id)
             emit(JobEvent(type="error", data={"message": str(exc)}))
         finally:
             q.close()
 
     threading.Thread(
-        target=target, daemon=True, name=f"oracle-job-{job_id}",
+        target=target, daemon=True, name=f"scrape-job-{job_id}",
     ).start()
     return {"job_id": job_id}
 

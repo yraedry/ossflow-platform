@@ -15,7 +15,7 @@ from ..errors import (
     ProviderSearchError,
     ProviderTimeoutError,
 )
-from ..models import Candidate, OracleChapter, OracleResult, OracleVolume
+from ..models import Candidate, ScrapeChapter, ScrapeResult, ScrapeVolume
 
 logger = logging.getLogger(__name__)
 
@@ -260,7 +260,7 @@ class BJJFanaticsProvider:
         return []
 
     # ------------------------------------------------------------------ scrape
-    def scrape(self, url: str) -> OracleResult:
+    def scrape(self, url: str) -> ScrapeResult:
         try:
             with httpx.Client(
                 timeout=_TIMEOUT_S,
@@ -285,7 +285,7 @@ class BJJFanaticsProvider:
         return self._parse_html(resp.text, url)
 
     # ------------------------------------------------------------- parsing
-    def _parse_html(self, html: str, url: str) -> OracleResult:
+    def _parse_html(self, html: str, url: str) -> ScrapeResult:
         tree = HTMLParser(html)
 
         title_node = tree.css_first("h1.product-title")
@@ -305,7 +305,7 @@ class BJJFanaticsProvider:
 
         # Walk children of the accordion; pair each h3.product__course-title
         # with the next sibling div.product__course-content.
-        volumes: list[OracleVolume] = []
+        volumes: list[ScrapeVolume] = []
         children = list(accordion.iter(include_text=False))
         i = 0
         while i < len(children):
@@ -346,7 +346,7 @@ class BJJFanaticsProvider:
             )
 
         try:
-            return OracleResult(
+            return ScrapeResult(
                 product_url=url,
                 provider_id=self.id,
                 poster_url=poster_url,
@@ -354,7 +354,7 @@ class BJJFanaticsProvider:
             )
         except Exception as e:  # pydantic ValidationError, etc.
             raise ProviderScrapeError(
-                f"failed building OracleResult: {e}"
+                f"failed building ScrapeResult: {e}"
             ) from e
 
     # ------------------------------------------------------------- poster
@@ -527,7 +527,7 @@ class BJJFanaticsProvider:
         started shipping landscape 16:9 promo posters for newer instructionals
         (e.g. "Engaging without regrets"); forcing portrait here returned
         None and left us with a 300×300 og:image thumbnail that cropped
-        the title. Accepting landscape in the final tier keeps Oracle
+        the title. Accepting landscape in the final tier keeps the scrapper
         usable on those products — the frontend handles non-portrait
         aspect ratios with ``object-contain``.
         """
@@ -560,7 +560,7 @@ class BJJFanaticsProvider:
         landscape.sort(key=lambda t: -t[1])
         return landscape[0][0]
 
-    def _parse_volume(self, h3_node, content_node) -> OracleVolume | None:
+    def _parse_volume(self, h3_node, content_node) -> ScrapeVolume | None:
         h3_text = h3_node.text(strip=True) or ""
         m = _VOLUME_NUM_RE.search(h3_text)
         if not m:
@@ -651,7 +651,7 @@ class BJJFanaticsProvider:
         # Build chapters: prefer the explicit end_hint from the cell (range
         # format), else use next chapter's start_s, else fallback +3600s.
         _LAST_FALLBACK_S = 3600.0
-        chapters: list[OracleChapter] = []
+        chapters: list[ScrapeChapter] = []
         n = len(parsed)
         for k, (title, start_s, end_hint) in enumerate(parsed):
             if end_hint is not None and end_hint > start_s:
@@ -679,14 +679,14 @@ class BJJFanaticsProvider:
                 )
                 end_s = start_s + 1.0
             chapters.append(
-                OracleChapter(title=title, start_s=start_s, end_s=end_s)
+                ScrapeChapter(title=title, start_s=start_s, end_s=end_s)
             )
 
         total_duration_s = (
             last_total if last_total is not None else chapters[-1].end_s
         )
 
-        return OracleVolume(
+        return ScrapeVolume(
             number=number,
             chapters=chapters,
             total_duration_s=total_duration_s,
