@@ -1364,39 +1364,5 @@ class DubbingPipeline:
                 pass
 
 
-def _compute_verdict(boundary_report, mos) -> dict:
-    """Combine boundary + MOS signals into a single green/amber/red verdict.
-
-    Boundary-first logic — boundaries directly reflect listener-perceived
-    cuts, while UTMOS scores dubbed-ducked audio unfairly low (trained on
-    clean studio speech). MOS is a tiebreaker, not a gate.
-
-    * **red** — at least one hard boundary (real listener "this is broken")
-    * **amber** — only warnings (potentially audible, never jarring)
-    * **green** — zero boundaries flagged
-
-    MOS only nudges the severity up when it's *very* poor (<2.0) and we
-    were already amber — otherwise a capítulo with zero boundaries but
-    MOS 2.1 (normal for TTS+ducking) stays green where it belongs.
-    """
-    hard = boundary_report.hard_cuts if boundary_report else 0
-    warn = boundary_report.warnings if boundary_report else 0
-    mos_score = mos.score if mos else None
-
-    if hard > 0:
-        level = "red"
-    elif warn > 0:
-        level = "amber"
-    else:
-        level = "green"
-
-    # Only let MOS lift an amber to red in genuinely broken territory.
-    if mos_score is not None and mos_score < 2.0 and level == "amber":
-        level = "red"
-
-    return {
-        "level": level,
-        "mos": mos_score,
-        "hard_cuts": hard,
-        "warnings": warn,
-    }
+# compute_verdict — migrado a core/qa_runner.py (T32.3).
+from .core.qa_runner import compute_verdict as _compute_verdict  # noqa: F401
