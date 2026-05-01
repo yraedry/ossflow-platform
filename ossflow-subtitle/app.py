@@ -82,11 +82,14 @@ def _get_regenerator(model: str, language: str):
     return _regenerator
 
 
-def _resolve_input(path: Path) -> Path:
-    """Validate input path exists. Returns the path as-is (file or directory)."""
-    if not path.exists():
-        raise FileNotFoundError(f"Path does not exist: {path}")
-    return path
+# Path helpers — migrados a subtitle_generator/shared/paths.py (T31.1).
+from subtitle_generator.shared.paths import (  # noqa: F401,E402
+    clean_base_stem as _clean_base_stem,
+    dub_srt_path_for as _dub_srt_path_for,
+    literal_srt_path_for as _literal_srt_path_for,
+    resolve_input as _resolve_input,
+    words_json_for as _words_json_for,
+)
 
 
 def _run_subtitle_generator(req: RunRequest, emit) -> None:
@@ -202,38 +205,7 @@ def _build_translator_with_fallback(opts: dict):
     return primary, fb
 
 
-def _clean_base_stem(srt_path: Path) -> str:
-    """Return the video-level stem of an SRT path, stripping language tags.
-
-    Examples:
-      "S01E01 foo.en.srt"  -> "S01E01 foo"
-      "S01E01 foo_EN.srt"  -> "S01E01 foo"
-      "S01E01 foo.srt"     -> "S01E01 foo"
-    """
-    stem = srt_path.stem
-    for tag in (".en", ".EN", "_en", "_EN"):
-        if stem.endswith(tag):
-            return stem[: -len(tag)]
-    return stem
-
-
-def _literal_srt_path_for(srt_path: Path) -> Path:
-    """Return <video-stem>.es.srt sidecar (literal subtitle)."""
-    return srt_path.with_name(f"{_clean_base_stem(srt_path)}.es.srt")
-
-
-def _dub_srt_path_for(srt_path: Path) -> Path:
-    """Return <video-stem>.dub.es.srt sidecar (iso-sync dubbing script)."""
-    return srt_path.with_name(f"{_clean_base_stem(srt_path)}.dub.es.srt")
-
-
-def _words_json_for(srt_path: Path) -> Path:
-    """Return <video>.words.json sibling for a given SRT.
-
-    The SRT may be .en.srt, .srt or already an .es.srt — we always walk back
-    to the base video stem.
-    """
-    return srt_path.with_name(f"{_clean_base_stem(srt_path)}.words.json")
+# Path helpers ya migrados arriba a subtitle_generator/shared/paths.py (T31.1).
 
 
 def _translate_for_dubbing(
