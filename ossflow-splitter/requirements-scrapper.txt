@@ -1,4 +1,4 @@
-# Lean dependencies for the oracle-only build.
+# Lean dependencies for the scrapper-only build.
 # No torch, no demucs, no easyocr, no opencv. ffmpeg comes from the base image.
 
 fastapi>=0.110

@@ -1,7 +1,7 @@
-"""Oracle-driven splitter: cuts mp4s using BJJFanatics-scraped timestamps.
+"""Scrapper-driven splitter: cuts mp4s using BJJFanatics-scraped timestamps.
 
-Unlike :class:`VideoSplitter` (signal-based), this module trusts the oracle
-absolutely and uses ``ffmpeg -c copy`` for keyframe-aligned fast splits.
+Unlike :class:`VideoSplitter` (signal-based), this module trusts the scrape
+result absolutely and uses ``ffmpeg -c copy`` for keyframe-aligned fast splits.
 """
 
 from __future__ import annotations
@@ -15,7 +15,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Callable, Optional
 
-from ..scrapper.models import OracleResult, OracleVolume
+from ..scrapper.models import ScrapeResult, ScrapeVolume
 from ..utils import sanitize_filename
 
 logger = logging.getLogger(__name__)
@@ -32,7 +32,7 @@ _STEM_NUMBER_RE = re.compile(r"(\d+)\s*$")
 
 @dataclass
 class SplitReport:
-    """Outcome of an :class:`OracleSplitter` run."""
+    """Outcome of a :class:`ChapterSplitter` run."""
 
     volumes_processed: int = 0
     chapters_created: int = 0
@@ -48,17 +48,17 @@ class SplitReport:
         }
 
 
-class OracleSplitter:
-    """Cuts mp4s by oracle timestamps into ``Season NN/`` folders."""
+class ChapterSplitter:
+    """Cuts mp4s by scraped timestamps into ``Season NN/`` folders."""
 
     def __init__(
         self,
         instructional_dir: Path,
-        oracle: OracleResult,
+        scrape_result: ScrapeResult,
         output_dir: Optional[Path] = None,
     ) -> None:
         self.instructional_dir = Path(instructional_dir)
-        self.oracle = oracle
+        self.scrape_result = scrape_result
         self.output_dir = Path(output_dir) if output_dir else self.instructional_dir
 
     # ------------------------------------------------------------------
@@ -66,12 +66,12 @@ class OracleSplitter:
     # ------------------------------------------------------------------
     def split(self, progress_cb: Optional[ProgressCb] = None) -> SplitReport:
         report = SplitReport()
-        total_chapters = sum(len(v.chapters) for v in self.oracle.volumes)
+        total_chapters = sum(len(v.chapters) for v in self.scrape_result.volumes)
         if total_chapters == 0:
             return report
 
         done = 0
-        for volume in self.oracle.volumes:
+        for volume in self.scrape_result.volumes:
             mp4 = self._locate_mp4_for_volume(volume.number)
             if mp4 is None:
                 msg = f"No mp4 found for Volume {volume.number}, skipping"
@@ -91,7 +91,7 @@ class OracleSplitter:
                 if diff > DURATION_TOLERANCE_S:
                     msg = (
                         f"Volume {volume.number}: mp4 duration "
-                        f"{actual_duration:.1f}s differs from oracle "
+                        f"{actual_duration:.1f}s differs from scraped "
                         f"{volume.total_duration_s:.1f}s by {diff:.1f}s "
                         f"(tolerance {DURATION_TOLERANCE_S}s)"
                     )

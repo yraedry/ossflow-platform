@@ -1,13 +1,13 @@
-from .models import OracleChapter, OracleVolume, OracleResult, Candidate
-from .provider import OracleProvider
+from .models import ScrapeChapter, ScrapeVolume, ScrapeResult, Candidate
+from .provider import ScrapeProvider
 from .errors import (
-    OracleError,
+    ScraperError,
     ProviderNotFoundError,
     ProviderSearchError,
     ProviderScrapeError,
     ProviderTimeoutError,
     HTMLChangedError,
-    OracleValidationError,
+    ScraperValidationError,
 )
 from .registry import ProviderRegistry, registry
 
@@ -22,18 +22,18 @@ def discover() -> None:
     registry.discover()
 
 __all__ = [
-    "OracleChapter",
-    "OracleVolume",
-    "OracleResult",
+    "ScrapeChapter",
+    "ScrapeVolume",
+    "ScrapeResult",
     "Candidate",
-    "OracleProvider",
-    "OracleError",
+    "ScrapeProvider",
+    "ScraperError",
     "ProviderNotFoundError",
     "ProviderSearchError",
     "ProviderScrapeError",
     "ProviderTimeoutError",
     "HTMLChangedError",
-    "OracleValidationError",
+    "ScraperValidationError",
     "ProviderRegistry",
     "registry",
     "discover",

@@ -3,28 +3,28 @@ from pydantic import ValidationError
 
 from chapter_splitter.scrapper import (
     Candidate,
-    OracleChapter,
-    OracleResult,
-    OracleVolume,
+    ScrapeChapter,
+    ScrapeResult,
+    ScrapeVolume,
     ProviderNotFoundError,
     ProviderRegistry,
 )
 
 
-def _chapter(t: str, s: float, e: float) -> OracleChapter:
-    return OracleChapter(title=t, start_s=s, end_s=e)
+def _chapter(t: str, s: float, e: float) -> ScrapeChapter:
+    return ScrapeChapter(title=t, start_s=s, end_s=e)
 
 
 def test_chapter_rejects_non_positive_duration():
     with pytest.raises(ValidationError):
-        OracleChapter(title="x", start_s=10.0, end_s=10.0)
+        ScrapeChapter(title="x", start_s=10.0, end_s=10.0)
     with pytest.raises(ValidationError):
-        OracleChapter(title="x", start_s=10.0, end_s=5.0)
+        ScrapeChapter(title="x", start_s=10.0, end_s=5.0)
 
 
 def test_volume_requires_monotonic_starts():
     with pytest.raises(ValidationError):
-        OracleVolume(
+        ScrapeVolume(
             number=1,
             total_duration_s=100,
             chapters=[_chapter("a", 10, 20), _chapter("b", 5, 15)],
@@ -33,24 +33,24 @@ def test_volume_requires_monotonic_starts():
 
 def test_volume_number_bounds():
     with pytest.raises(ValidationError):
-        OracleVolume(number=0, total_duration_s=10, chapters=[_chapter("a", 0, 5)])
+        ScrapeVolume(number=0, total_duration_s=10, chapters=[_chapter("a", 0, 5)])
     with pytest.raises(ValidationError):
-        OracleVolume(number=51, total_duration_s=10, chapters=[_chapter("a", 0, 5)])
+        ScrapeVolume(number=51, total_duration_s=10, chapters=[_chapter("a", 0, 5)])
 
 
 def test_result_rejects_duplicate_volume_numbers():
-    v1 = OracleVolume(number=1, total_duration_s=100, chapters=[_chapter("a", 0, 100)])
-    v2 = OracleVolume(number=1, total_duration_s=200, chapters=[_chapter("b", 0, 200)])
+    v1 = ScrapeVolume(number=1, total_duration_s=100, chapters=[_chapter("a", 0, 100)])
+    v2 = ScrapeVolume(number=1, total_duration_s=200, chapters=[_chapter("b", 0, 200)])
     with pytest.raises(ValidationError):
-        OracleResult(
+        ScrapeResult(
             product_url="https://x/", provider_id="bjjfanatics", volumes=[v1, v2]
         )
 
 
 def test_result_volume_lookup():
-    v1 = OracleVolume(number=1, total_duration_s=100, chapters=[_chapter("a", 0, 100)])
-    v2 = OracleVolume(number=2, total_duration_s=200, chapters=[_chapter("b", 0, 200)])
-    r = OracleResult(
+    v1 = ScrapeVolume(number=1, total_duration_s=100, chapters=[_chapter("a", 0, 100)])
+    v2 = ScrapeVolume(number=2, total_duration_s=200, chapters=[_chapter("b", 0, 200)])
+    r = ScrapeResult(
         product_url="https://x/", provider_id="bjjfanatics", volumes=[v1, v2]
     )
     assert r.volume(1) is v1

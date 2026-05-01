@@ -1,4 +1,4 @@
-"""Tests for :class:`chapter_splitter.splitting.oracle_splitter.OracleSplitter`."""
+"""Tests for :class:`chapter_splitter.splitting.chapter_splitter.ChapterSplitter`."""
 
 from __future__ import annotations
 
@@ -9,12 +9,12 @@ from pathlib import Path
 import pytest
 
 from chapter_splitter.scrapper.models import (
-    OracleChapter,
-    OracleResult,
-    OracleVolume,
+    ScrapeChapter,
+    ScrapeResult,
+    ScrapeVolume,
 )
-from chapter_splitter.splitting.oracle_splitter import (
-    OracleSplitter,
+from chapter_splitter.splitting.chapter_splitter import (
+    ChapterSplitter,
     SplitReport,
 )
 
@@ -47,17 +47,17 @@ def instructional_dir(tmp_path: Path) -> Path:
     return d
 
 
-def _make_oracle(durations: dict[int, list[tuple[float, float, str]]]) -> OracleResult:
+def _make_scrape(durations: dict[int, list[tuple[float, float, str]]]) -> ScrapeResult:
     volumes = []
     for num, chapters in durations.items():
         ch_objs = [
-            OracleChapter(title=t, start_s=s, end_s=e) for (s, e, t) in chapters
+            ScrapeChapter(title=t, start_s=s, end_s=e) for (s, e, t) in chapters
         ]
         total = ch_objs[-1].end_s
         volumes.append(
-            OracleVolume(number=num, chapters=ch_objs, total_duration_s=total)
+            ScrapeVolume(number=num, chapters=ch_objs, total_duration_s=total)
         )
-    return OracleResult(
+    return ScrapeResult(
         product_url="https://example.com/p",
         provider_id="test",
         volumes=volumes,
@@ -65,13 +65,13 @@ def _make_oracle(durations: dict[int, list[tuple[float, float, str]]]) -> Oracle
 
 
 def test_split_creates_seasons_and_files(instructional_dir: Path) -> None:
-    oracle = _make_oracle({
+    scrape = _make_scrape({
         1: [(0.0, 10.0, "Intro"), (10.0, 20.0, "Mid"), (20.0, 30.0, "End")],
         2: [(0.0, 10.0, "Alpha"), (10.0, 20.0, "Beta")],
     })
     calls: list[tuple[float, str]] = []
 
-    splitter = OracleSplitter(instructional_dir, oracle)
+    splitter = ChapterSplitter(instructional_dir, scrape)
     report = splitter.split(progress_cb=lambda p, m: calls.append((p, m)))
 
     assert isinstance(report, SplitReport)
@@ -92,13 +92,13 @@ def test_split_creates_seasons_and_files(instructional_dir: Path) -> None:
 
 
 def test_missing_volume_mp4_warns_and_skips(instructional_dir: Path) -> None:
-    oracle = _make_oracle({
+    scrape = _make_scrape({
         1: [(0.0, 10.0, "A")],
         2: [(0.0, 10.0, "B")],
         3: [(0.0, 5.0, "Ghost")],  # no mp4 ending in 3
     })
 
-    splitter = OracleSplitter(instructional_dir, oracle)
+    splitter = ChapterSplitter(instructional_dir, scrape)
     report = splitter.split()
 
     assert report.volumes_processed == 2  # only 1 and 2
@@ -110,12 +110,12 @@ def test_missing_volume_mp4_warns_and_skips(instructional_dir: Path) -> None:
 def test_duration_mismatch_flags_needs_review(
     instructional_dir: Path,
 ) -> None:
-    # mp4 of vol 1 is 30s; oracle claims 60s -> diff > 5s -> needs_review
-    oracle = _make_oracle({
+    # mp4 of vol 1 is 30s; scrape claims 60s -> diff > 5s -> needs_review
+    scrape = _make_scrape({
         1: [(0.0, 30.0, "A"), (30.0, 60.0, "B")],
         2: [(0.0, 20.0, "C")],
     })
-    splitter = OracleSplitter(instructional_dir, oracle)
+    splitter = ChapterSplitter(instructional_dir, scrape)
     report = splitter.split()
 
     assert 1 in report.needs_review_flags
