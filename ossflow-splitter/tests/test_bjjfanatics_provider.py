@@ -6,8 +6,8 @@ from pathlib import Path
 import httpx
 import pytest
 
-from chapter_splitter.oracle.errors import HTMLChangedError
-from chapter_splitter.oracle.providers.bjjfanatics import (
+from chapter_splitter.scrapper.errors import HTMLChangedError
+from chapter_splitter.scrapper.providers.bjjfanatics import (
     BJJFanaticsProvider,
     _parse_range,
     _parse_time,
