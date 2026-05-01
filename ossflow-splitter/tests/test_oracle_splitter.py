@@ -8,7 +8,7 @@ from pathlib import Path
 
 import pytest
 
-from chapter_splitter.oracle.models import (
+from chapter_splitter.scrapper.models import (
     OracleChapter,
     OracleResult,
     OracleVolume,

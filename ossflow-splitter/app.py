@@ -76,7 +76,7 @@ app = create_app(service_name=SERVICE_NAME, task_fn=_run_chapter_splitter)
 from fastapi import HTTPException as _HTTPException  # noqa: E402
 from pydantic import BaseModel as _BaseModel  # noqa: E402
 
-from chapter_splitter.oracle import (  # noqa: E402
+from chapter_splitter.scrapper import (  # noqa: E402
     OracleError,
     ProviderNotFoundError,
     ProviderScrapeError,
@@ -174,7 +174,7 @@ class OracleRunRequest(BaseModel):
 
 
 def _run_oracle_task(req: OracleRunRequest, emit) -> None:
-    from chapter_splitter.oracle.models import OracleResult  # type: ignore
+    from chapter_splitter.scrapper.models import OracleResult  # type: ignore
     from chapter_splitter.splitting.oracle_splitter import (  # type: ignore
         OracleSplitter,
     )

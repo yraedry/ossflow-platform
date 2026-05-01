@@ -1,7 +1,7 @@
 import pytest
 from pydantic import ValidationError
 
-from chapter_splitter.oracle import (
+from chapter_splitter.scrapper import (
     Candidate,
     OracleChapter,
     OracleResult,

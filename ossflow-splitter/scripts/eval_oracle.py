@@ -73,7 +73,7 @@ def _parse_args() -> argparse.Namespace:
 
 
 def _run_search(provider, title: str, author: str, checks: list[Check]) -> Optional[object]:
-    from chapter_splitter.oracle import OracleError
+    from chapter_splitter.scrapper import OracleError
 
     try:
         candidates = provider.search(title, author)
@@ -219,7 +219,7 @@ def main() -> int:
         format="%(levelname)s %(name)s: %(message)s",
     )
 
-    from chapter_splitter.oracle import OracleError, discover, registry
+    from chapter_splitter.scrapper import OracleError, discover, registry
 
     discover()
     try:

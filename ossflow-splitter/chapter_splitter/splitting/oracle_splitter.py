@@ -15,7 +15,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Callable, Optional
 
-from ..oracle.models import OracleResult, OracleVolume
+from ..scrapper.models import OracleResult, OracleVolume
 from ..utils import sanitize_filename
 
 logger = logging.getLogger(__name__)
