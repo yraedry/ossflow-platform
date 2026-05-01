@@ -28,79 +28,12 @@ logger = logging.getLogger(__name__)
 ProgressCallback = Optional[Callable[[int, int, str], None]]
 
 
-# ======================================================================
-# SRT parsing helpers
-# ======================================================================
-
-def _parse_time(time_str: str) -> int:
-    """Parse ``HH:MM:SS,mmm`` to milliseconds."""
-    h, m, s_ms = time_str.split(":")
-    s, ms = s_ms.split(",")
-    return (int(h) * 3600 + int(m) * 60 + int(s)) * 1000 + int(ms)
-
-
-def parse_srt(srt_path: Path) -> list[SrtBlock]:
-    """Parse an SRT file into a list of :class:`SrtBlock`."""
-    content = srt_path.read_text(encoding="utf-8")
-    pattern = re.compile(
-        r"(\d+)\n"
-        r"(\d{2}:\d{2}:\d{2},\d{3}) --> (\d{2}:\d{2}:\d{2},\d{3})\n"
-        r"(.*?)(?=\n\n|\n$|\Z)",
-        re.DOTALL,
-    )
-    blocks: list[SrtBlock] = []
-    for m in pattern.finditer(content):
-        text = m.group(4).replace("\n", " ").strip()
-        text = re.sub(r"\((.*?)\)", r"\1", text)
-        blocks.append(SrtBlock(
-            index=int(m.group(1)),
-            start_ms=_parse_time(m.group(2)),
-            end_ms=_parse_time(m.group(3)),
-            text=text,
-        ))
-    return blocks
-
-
-_CONTINUATION_STARTS = (
-    "y ", "o ", "u ", "e ", "pero ", "porque ", "pues ", "así que ",
-    "aunque ", "sino ", "mientras ", "cuando ", "donde ", "como ",
-    "que ", "para ", "al ", "del ", "de ", "en ", "con ", "sin ",
-    "sobre ", "entre ", "hasta ", "desde ", "a ",
+# SRT helpers — migrados a core/srt_parser.py (T32.1).
+from .core.srt_parser import (  # noqa: F401
+    apply_prosodic_continuity as _apply_prosodic_continuity,
+    parse_srt,
+    parse_time as _parse_time,
 )
-
-
-def _apply_prosodic_continuity(text: str, next_text: str | None) -> str:
-    """Adjust trailing punctuation so the TTS doesn't close prosody.
-
-    Si la siguiente frase continúa el discurso (empieza con minúscula o
-    con conector), cambiamos el punto final `.` por coma para que el TTS
-    no marque cierre entonativo. Signos fuertes (! ?) quedan intactos
-    porque sí marcan intención. Sin siguiente frase, dejamos el punto
-    (es el cierre real del bloque).
-    """
-    if not text or not next_text:
-        return text
-    stripped = text.rstrip()
-    if not stripped.endswith("."):
-        return text
-    if stripped.endswith("...") or stripped.endswith(".."):
-        return text
-
-    nxt_clean = next_text.lstrip()
-    if not nxt_clean:
-        return text
-
-    first_char = nxt_clean[0]
-    continues = first_char.islower()
-    if not continues:
-        lower_nxt = nxt_clean.lower()
-        continues = any(lower_nxt.startswith(c) for c in _CONTINUATION_STARTS)
-
-    if not continues:
-        return text
-
-    trailing_ws = text[len(stripped):]
-    return stripped[:-1] + "," + trailing_ws
 
 
 # ======================================================================
