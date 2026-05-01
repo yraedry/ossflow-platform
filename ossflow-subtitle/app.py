@@ -86,75 +86,10 @@ from subtitle_generator.shared.paths import (  # noqa: F401,E402
 )
 
 
-def _run_subtitle_generator(req: RunRequest, emit) -> None:
-    """Bridge RunRequest -> subtitle_generator.pipeline.SubtitlePipeline.
-
-    When ``options.translate_only=True`` runs SRT translation (EN→ES via Ollama/OpenAI)
-    instead of transcription — reusing the same job/SSE contract.
-    """
-    opts = req.options or {}
-
-    if opts.get("translate_only"):
-        _run_translate_directory(req, emit)
-        return
-
-    input_path = _resolve_input(Path(req.input_path))
-
-    level = logging.DEBUG if opts.get("verbose") else logging.INFO
-    logging.basicConfig(level=level, format="%(asctime)s [%(levelname)s] %(message)s", datefmt="%H:%M:%S")
-
-    with emit_logs(emit, level=level):
-        from subtitle_generator.config import (  # type: ignore
-            DEFAULT_INITIAL_PROMPT,
-            SubtitleConfig,
-            TranscriptionConfig,
-            generate_prompt,
-        )
-        from subtitle_generator.cuda_setup import setup_nvidia_dlls, setup_pytorch_safety  # type: ignore
-        from subtitle_generator.pipeline import SubtitlePipeline  # type: ignore
-
-        setup_nvidia_dlls()
-        setup_pytorch_safety()
-
-        if opts.get("prompt") is not None:
-            initial_prompt = opts["prompt"]
-        elif opts.get("instructor") or opts.get("topic"):
-            initial_prompt = generate_prompt(instructor=opts.get("instructor"), topic=opts.get("topic"))
-        else:
-            initial_prompt = DEFAULT_INITIAL_PROMPT
-
-        t_config = TranscriptionConfig(
-            model_name=opts.get("model", "large-v3"),
-            language=opts.get("language", "en"),
-            batch_size=int(opts.get("batch_size", 4)),
-            initial_prompt=initial_prompt,
-            postprocess_openai=bool(opts.get("postprocess_openai", False)),
-            postprocess_model=str(opts.get("postprocess_model", "gpt-4o-mini")),
-            postprocess_api_key=opts.get("postprocess_api_key") or os.environ.get("OPENAI_API_KEY"),
-        )
-        s_config = SubtitleConfig()
-
-        force = bool(opts.get("force", False))
-        emit(JobEvent(type="log", data={"message":
-            f"starting subtitle-generator on {input_path}"
-            + (" (force overwrite)" if force else "")
-        }))
-        import gc
-        import torch
-
-        pipeline = SubtitlePipeline(t_config, s_config)
-        pipeline.load_models()
-        try:
-            if input_path.is_file():
-                pipeline.process_file(input_path, force=force)
-            else:
-                pipeline.process_directory(input_path, force=force)
-            emit(JobEvent(type="progress", data={"pct": 100}))
-        finally:
-            del pipeline
-            gc.collect()
-            if torch.cuda.is_available():
-                torch.cuda.empty_cache()
+# Transcriber bridge — migrado a subtitle_generator/core/transcriber.py (T31.5).
+from subtitle_generator.core.transcriber import (  # noqa: E402,F401
+    run_subtitle_generator as _run_subtitle_generator,
+)
 
 
 # Translate runner — migrado a subtitle_generator/core/translate_runner.py (T31.4).
@@ -166,33 +101,11 @@ from subtitle_generator.core.translate_runner import (  # noqa: E402,F401
 )
 
 
-def _hf_cache_root() -> Path:
-    return Path(
-        os.environ.get("HF_HOME")
-        or os.environ.get("HUGGINGFACE_HUB_CACHE")
-        or "/models/huggingface"
-    )
-
-
-def _clear_hf_locks() -> dict:
-    """Delete stale .lock files inside the HuggingFace hub cache.
-
-    Returns a summary dict with counts. Safe: only touches files under
-    `<cache>/hub/.locks/` (or legacy `<cache>/.locks/`).
-    """
-    root = _hf_cache_root()
-    candidates = [root / "hub" / ".locks", root / ".locks"]
-    removed, errors = 0, []
-    for base in candidates:
-        if not base.exists():
-            continue
-        for lock in base.rglob("*.lock"):
-            try:
-                lock.unlink()
-                removed += 1
-            except Exception as exc:
-                errors.append(f"{lock}: {exc}")
-    return {"removed": removed, "errors": errors, "roots": [str(c) for c in candidates]}
+# HF cache helpers — migrados a subtitle_generator/shared/hf_cache.py (T31.5).
+from subtitle_generator.shared.hf_cache import (  # noqa: E402,F401
+    clear_hf_locks as _clear_hf_locks,
+    hf_cache_root as _hf_cache_root,
+)
 
 
 # Best-effort cleanup at import/startup — frees locks left by a killed worker.
