@@ -183,6 +183,21 @@ def run_dubbing_generator(req: RunRequest, emit, app_state=None) -> None:
                         ):
                             _remove_existing_output(vid)
                 results = pipeline.process_directory(input_path)
+                # Surface the per-run report so the orchestrator can
+                # detect partial completion (some chapters failed TTS or
+                # had no ES SRT) and decide whether to retry. Permissive
+                # mode (see ``DubbingPipeline.process_directory`` doc):
+                # ``last_run_report`` is always populated post-run.
+                report = getattr(pipeline, "last_run_report", None)
+                if report:
+                    emit(JobEvent(type="log", data={
+                        "summary": report,
+                        "message": (
+                            f"Dubbing report: {report['dubbed']}/{report['total']} doblados, "
+                            f"{len(report['missing_srt'])} sin SRT, "
+                            f"{len(report['failed_tts'])} fallaron TTS"
+                        ),
+                    }))
                 emit(JobEvent(type="progress", data={
                     "pct": 100, "videos": len(results),
                 }))

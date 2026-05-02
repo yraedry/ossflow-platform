@@ -56,6 +56,11 @@ class DubbingPipeline:
         # so it doesn't hold VRAM during Demucs (fase 0). The caller is
         # responsible for stopping it after the job ends.
         self._s2pro_manager = s2pro_manager
+        # Last batch report for ``process_directory`` callers. Populated
+        # at the end of every directory run (even on full success — empty
+        # missing/failed lists). The orchestrator inspects this to decide
+        # whether to emit a "partial dubbing" log event.
+        self.last_run_report: Optional[dict] = None
 
         self.separator = AudioSeparator(config)
         self.voice_cloner = VoiceCloner(config)
@@ -252,13 +257,22 @@ class DubbingPipeline:
     def process_directory(self, root_dir: Path) -> list[Path]:
         """Process all videos in *root_dir* that have matching SRT files.
 
-        Strict mode (since 2026-04-29 fix): if any chapter is silently
-        missing — either because no ES SRT exists for it OR because TTS
-        raised — we raise ``RuntimeError`` after the loop with a summary.
-        Previously a logged warning + continue meant a partial Season
-        (e.g. 4/9 chapters dubbed) was reported as ``completed`` to the
-        orchestrator, which is the worst-case failure mode: the user
-        thinks the Season is done.
+        Permissive mode (since 2026-05-02 resilience plan): instead of
+        raising ``RuntimeError`` on partial output, the pipeline logs a
+        warning and exposes the per-run accounting via
+        ``self.last_run_report``. The caller (``core/runner.py``) emits
+        a ``log`` event with the report, and the orchestrator checks the
+        filesystem to decide whether to retry the missing chapters.
+
+        Why permissive: if the s2.cpp / Demucs container is OOM-killed
+        mid-batch, raising would mark the entire step FAILED — the
+        caller cannot tell apart "everything failed" from "8/12 done,
+        worth retrying". Returning what we have lets the orchestrator
+        retry idempotently (re-running this method skips already-dubbed
+        chapters; see the ``already_dubbed`` filter below).
+
+        ``last_run_report`` is always populated, even on full success:
+        ``missing_srt`` and ``failed_tts`` are empty lists in that case.
         """
         results: list[Path] = []
         chapters_missing_srt: list[str] = []
@@ -278,6 +292,17 @@ class DubbingPipeline:
                 and "_DOBLADO" not in f
             )
             for video_name in videos:
+                # Idempotent skip: chapter already dubbed in a prior run
+                # (e.g. orchestrator-driven retry after OOM kill). Without
+                # this filter, retries would reprocess everything and the
+                # OOM repeats. Output path mirrors ``process_file``.
+                already_dubbed = (
+                    Path(dirpath) / "doblajes" / f"{Path(video_name).stem}.mkv"
+                )
+                if already_dubbed.exists() and already_dubbed.stat().st_size > 0:
+                    logger.info("Skip already-dubbed: %s", video_name)
+                    continue
+
                 total_chapters += 1
                 video_path = Path(dirpath) / video_name
                 base = video_path.with_suffix("")
@@ -305,29 +330,20 @@ class DubbingPipeline:
                     logger.exception("Error processing %s", video_name)
                     chapters_failed.append((video_name, str(exc)))
 
-        # Strict accounting: every chapter must end up either in results or
-        # in one of the failure lists. If anything failed, raise so the
-        # orchestrator marks the step FAILED rather than COMPLETED.
+        # Always populate the report — the caller checks for non-empty
+        # missing/failed lists to decide whether to surface a warning.
+        self.last_run_report = {
+            "total": total_chapters,
+            "dubbed": len(results),
+            "missing_srt": chapters_missing_srt,
+            "failed_tts": chapters_failed,
+        }
         if chapters_missing_srt or chapters_failed:
-            parts = []
-            if chapters_missing_srt:
-                parts.append(
-                    f"{len(chapters_missing_srt)} sin SRT ES: "
-                    + ", ".join(chapters_missing_srt[:5])
-                    + (" …" if len(chapters_missing_srt) > 5 else "")
-                )
-            if chapters_failed:
-                parts.append(
-                    f"{len(chapters_failed)} fallaron TTS: "
-                    + ", ".join(name for name, _ in chapters_failed[:5])
-                    + (" …" if len(chapters_failed) > 5 else "")
-                )
-            summary = (
-                f"Dubbing incompleto: {len(results)}/{total_chapters} chapters doblados. "
-                + " | ".join(parts)
+            logger.warning(
+                "Dubbing parcial: %d/%d capítulos. Missing SRT: %d. Failed TTS: %d.",
+                len(results), total_chapters,
+                len(chapters_missing_srt), len(chapters_failed),
             )
-            raise RuntimeError(summary)
-
         return results
 
     # ------------------------------------------------------------------
