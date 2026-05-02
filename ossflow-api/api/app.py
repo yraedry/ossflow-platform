@@ -33,9 +33,7 @@ from typing import Optional
 
 from fastapi import FastAPI, Request, UploadFile, File, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import HTMLResponse, StreamingResponse, JSONResponse, FileResponse, Response
-from fastapi.staticfiles import StaticFiles
-from fastapi.templating import Jinja2Templates
+from fastapi.responses import StreamingResponse, JSONResponse, FileResponse, Response
 
 from api.event_normalizer import normalize
 from api.paths import to_container_path
@@ -58,8 +56,6 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(me
 log = logging.getLogger("web")
 
 BASE_DIR = Path(__file__).parent
-TEMPLATES_DIR = BASE_DIR / "templates"
-STATIC_DIR = BASE_DIR / "static"
 
 # Add parent to path so we can import chapter_splitter / subtitle_generator
 sys.path.insert(0, str(BASE_DIR.parent))
@@ -146,9 +142,6 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
-app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
-templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
 
 # Register routers (E7)
 from ossflow_api.modules.settings import settings_router  # noqa: E402
@@ -505,13 +498,6 @@ async def run_dubbing(job: JobInfo, voice_profile: Optional[str] = None, use_mod
 # ---------------------------------------------------------------------------
 # API Routes
 # ---------------------------------------------------------------------------
-
-@app.get("/", response_class=HTMLResponse)
-async def index(request: Request):
-    return templates.TemplateResponse(request=request, name="index.html")
-
-
-
 
 MEDIA_ROOT = os.environ.get("MEDIA_ROOT", "/media")
 
