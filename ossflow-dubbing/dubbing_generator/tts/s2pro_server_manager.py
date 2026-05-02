@@ -94,7 +94,7 @@ class S2ProServerManager:
             "--server",
             "-H", self.cfg.s2_server_host,
             "-P", str(self.cfg.s2_server_port),
-            "-c", str(self.cfg.s2_cuda_device),
+            "-v", str(self.cfg.s2_vulkan_device),
             "-m", str(gguf),
             "-t", str(self.cfg.s2_tokenizer_path),
         ]
