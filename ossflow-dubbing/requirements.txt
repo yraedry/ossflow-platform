@@ -1,5 +1,5 @@
 # Dubbing-generator deps.
-# TTS: S2-Pro (Fish Audio, voice cloning local, backend Vulkan) — único motor
+# TTS: S2-Pro (Fish Audio, voice cloning local, backend CUDA) — único motor
 # soportado tras T22.5 (eliminados ElevenLabs/Piper/Kokoro).
 # XTTS-v2 eliminado previamente — usaba coqui-tts + transformers + ~8-10GB.
 --extra-index-url https://download.pytorch.org/whl/cu124

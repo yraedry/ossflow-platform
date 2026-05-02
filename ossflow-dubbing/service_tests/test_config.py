@@ -14,7 +14,7 @@ def test_s2pro_defaults():
     assert cfg.s2_top_k == 30
     assert cfg.s2_max_tokens == 1024
     assert cfg.s2_request_timeout == 180.0
-    assert cfg.s2_vulkan_device == 0
+    assert cfg.s2_cuda_device == 0
     assert cfg.s2_health_timeout_s == 60.0
 
 

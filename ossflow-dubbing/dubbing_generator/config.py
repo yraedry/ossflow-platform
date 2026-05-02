@@ -139,22 +139,17 @@ class DubbingConfig:
     xtts_en_terms_extra: tuple[str, ...] = ()
 
     # ------------------------------------------------------------------
-    # Fish Audio S2-Pro (local Vulkan voice-clone TTS)
+    # Fish Audio S2-Pro (local CUDA voice-clone TTS)
     # ------------------------------------------------------------------
     # s2.cpp inference engine running as HTTP server inside the container.
-    # The server is booted lazily by the runner per-job (start at fase 3,
-    # stop in finally) so the GPU is free for Demucs of the next file.
-    # Model load takes ~10 s; we amortize it across all phrases of a
-    # single dub.
+    # The server is booted at FastAPI startup (s2pro_server_manager) and
+    # stays resident — model load takes ~10 s and we don't want to pay it
+    # per phrase.
     #
-    # Backend: Vulkan. CUDA was discarded because ggml's CUDA backend
-    # does NOT support `get_rows` for K-quant tensors (Q4_K, Q5_K, Q6_K)
-    # — it silently falls back to CPU compute, collapsing synthesis to
-    # ~77 s/phrase on a 2060 with Q4_K_M. Vulkan has full K-quant kernel
-    # coverage and runs the same model at GPU speed (5-15 s/phrase).
-    # Deployment target is Linux LXC on Proxmox; nvidia-container-toolkit
-    # injects the NVIDIA Vulkan ICD when compose requests the `graphics`
-    # capability.
+    # Backend: CUDA (no Vulkan). Vulkan was discarded because Docker
+    # Desktop on Windows/WSL2 doesn't expose the NVIDIA Vulkan ICD into
+    # containers — only CUDA passes through. CUDA also gives us
+    # dev/prod parity (workstation WSL2 + LXC Proxmox both use CUDA).
     #
     # IMPORTANT: ``s2_ref_text`` MUST match what the speaker says in the
     # ``s2_ref_audio_path`` WAV exactly. Drift between the two collapses
@@ -190,7 +185,7 @@ class DubbingConfig:
     # Server boot health timeout. GGUF mmap from NFS-backed /models/s2pro
     # can take 20+ s on cold cache; 60 s is generous.
     s2_health_timeout_s: float = 60.0
-    s2_vulkan_device: int = 0
+    s2_cuda_device: int = 0
 
     # ------------------------------------------------------------------
     # Voice cloning
