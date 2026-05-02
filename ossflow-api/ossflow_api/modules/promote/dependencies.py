@@ -27,10 +27,17 @@ def _default_cache_factory() -> object:
 
 
 def _default_refresh_flags(item: dict) -> None:
-    """Wrapper diferido a ``modules.library.refresh.refresh_instructional_flags``."""
-    from ossflow_api.modules.library.refresh import refresh_instructional_flags
+    """Wrapper diferido a ``modules.library.refresh.rediscover_instructional``.
 
-    refresh_instructional_flags(item)
+    Promote borra el ``.mp4`` original y crea un ``.mkv`` nuevo. Por eso
+    necesitamos rediscover (re-walk filesystem) en vez de refresh_flags
+    (solo re-stat de entradas existentes), que no descubriría el .mkv
+    recién creado y dejaría la cache mostrando un instructional sin el
+    nuevo capítulo promovido — el botón "Promover" seguiría apareciendo.
+    """
+    from ossflow_api.modules.library.refresh import rediscover_instructional
+
+    rediscover_instructional(item)
 
 
 def _default_library_path_loader() -> str | None:
