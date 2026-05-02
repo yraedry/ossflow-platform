@@ -36,10 +36,17 @@ import json
 import os
 import re
 import subprocess
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import Any, Iterable
 
 from .cache import find_poster
+
+# Capa máxima de paralelismo para ffprobe en refresh batch. Cada probe
+# es un subprocess externo (release del GIL durante I/O), así que threads
+# escalan bien. 8 cubre seasons típicas (6-12 capítulos) sin saturar el
+# scheduler ni la CPU del NAS sirviendo el ffprobe seek.
+_FFPROBE_MAX_WORKERS = 8
 
 VIDEO_EXTENSIONS = {".mp4", ".mkv", ".mov", ".avi", ".webm", ".m4v"}
 
@@ -270,8 +277,13 @@ def refresh_instructional_flags(item: dict[str, Any]) -> dict[str, Any]:
         item["poster_mtime"] = None
 
     videos = item.get("videos") or []
-    fresh_videos: list[dict[str, Any]] = []
-    subtitled = dubbed = chapters = 0
+    # Pre-filtro: descarta entradas inválidas o ficheros que ya no existen.
+    # Tras un promote masivo cada vídeo necesita ffprobe (fingerprint nuevo
+    # tras el remux), así que paralelizar el batch reduce >10s a <2s en
+    # seasons típicas. Cada _video_flags lanza ffprobe (subprocess libera
+    # el GIL) y es side-effect-free hasta el .update() final, que hacemos
+    # secuencialmente con los resultados ordenados.
+    candidates: list[tuple[dict[str, Any], Path]] = []
     for v in videos:
         if not isinstance(v, dict):
             continue
@@ -285,7 +297,21 @@ def refresh_instructional_flags(item: dict[str, Any]) -> dict[str, Any]:
         # scans (before the filter was added to scan_library).
         if vp.stem.endswith("_DOBLADO"):
             continue
-        v.update(_video_flags(vp, cached=v))
+        candidates.append((v, vp))
+
+    if candidates:
+        with ThreadPoolExecutor(max_workers=_FFPROBE_MAX_WORKERS) as pool:
+            flag_results = list(pool.map(
+                lambda c: _video_flags(c[1], cached=c[0]),
+                candidates,
+            ))
+    else:
+        flag_results = []
+
+    fresh_videos: list[dict[str, Any]] = []
+    subtitled = dubbed = chapters = 0
+    for (v, _vp), flags in zip(candidates, flag_results):
+        v.update(flags)
         fresh_videos.append(v)
         if v.get("has_subtitles_en"):
             subtitled += 1
