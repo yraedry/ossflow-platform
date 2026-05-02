@@ -60,12 +60,32 @@ async def _emit(pipeline: PipelineInfo, queue: asyncio.Queue, event: dict) -> No
     await _shim()._emit(pipeline, queue, event)
 
 
+DUBBING_MAX_RETRIES = 2
+DUBBING_RETRY_BACKOFF_S = 30.0
+
+
 async def run_step(
     pipeline: PipelineInfo,
     step_index: int,
     queue: asyncio.Queue,
 ) -> bool:
-    """Ejecuta un step via su microservicio backend."""
+    """Ejecuta un step via su microservicio backend.
+
+    Resilience plan (2026-05-02): el step ``dubbing`` tiene retry
+    automático cuando el filesystem revela output parcial (capítulos
+    pendientes) tras un terminal event ``done`` o un cierre de stream
+    sin terminal. Hasta ``DUBBING_MAX_RETRIES`` reintentos, separados
+    por ``DUBBING_RETRY_BACKOFF_S`` y un health-poll del backend. El
+    payload de retry tiene ``force=False`` hardcoded para no destruir
+    capítulos buenos.
+
+    TODO: chapters/subtitles/translate tienen el mismo bug latente
+    (si el container muere a mitad de un job, podemos asumir éxito
+    sin que esté completo). El retry pattern de aquí es scoped a
+    dubbing porque es donde el síntoma es más caro (~70 min) y porque
+    el filesystem-check es trivial vía ``season_already_dubbed``. Para
+    los otros steps habría que escribir verificadores equivalentes.
+    """
     pmod = _shim()
     step = pipeline.steps[step_index]
     step.status = StepStatus.RUNNING
@@ -192,6 +212,15 @@ async def run_step(
                 return False
 
             if evt.kind == "done":
+                # Dubbing-only: antes de marcar COMPLETED, verificar
+                # filesystem; si hay capítulos pendientes, reintentar
+                # hasta DUBBING_MAX_RETRIES. Otros steps caen directo.
+                if step.name == "dubbing":
+                    handled = await _dubbing_retry_if_partial(
+                        pipeline, step, step_index, queue,
+                    )
+                    if handled is not None:
+                        return handled
                 step.status = StepStatus.COMPLETED
                 step.progress = 100.0
                 step.completed_at = datetime.now(timezone.utc).isoformat()
@@ -212,7 +241,17 @@ async def run_step(
                     "progress": step.progress,
                 })
 
-        # Stream cerrado sin terminal event → success.
+        # Stream cerrado sin terminal event. Antes asumíamos éxito;
+        # ahora, para dubbing, verificamos filesystem y reintentamos
+        # si hay capítulos pendientes (resilience plan 2026-05-02).
+        # Para chapters/subtitles/translate sigue siendo "asumir éxito"
+        # — ver TODO al inicio de run_step.
+        if step.name == "dubbing":
+            handled = await _dubbing_retry_if_partial(
+                pipeline, step, step_index, queue,
+            )
+            if handled is not None:
+                return handled
         step.status = StepStatus.COMPLETED
         step.progress = 100.0
         step.completed_at = datetime.now(timezone.utc).isoformat()
@@ -236,6 +275,22 @@ async def run_step(
         })
         raise
     except BackendError as exc:
+        # Resilience: para dubbing, un BackendError (incluído el 404
+        # cuando el container murió y se reapeó) puede ser "tenemos
+        # 8/12 capítulos en disco, intenta los 4 restantes". Verificar
+        # filesystem y reintentar antes de marcar FAILED.
+        if step.name == "dubbing":
+            log.warning(
+                "[pipeline:%s] dubbing BackendError: %s — verificando "
+                "filesystem para retry",
+                pipeline.pipeline_id, exc,
+            )
+            step.message = f"backend error: {exc}"
+            handled = await _dubbing_retry_if_partial(
+                pipeline, step, step_index, queue,
+            )
+            if handled is not None:
+                return handled
         step.status = StepStatus.FAILED
         step.completed_at = datetime.now(timezone.utc).isoformat()
         step.message = f"backend error: {exc}"
@@ -428,6 +483,26 @@ async def run_batch(batch) -> None:
                 batch.status = StepStatus.FAILED
                 batch.completed_at = datetime.now(timezone.utc).isoformat()
                 return
+        elif final is not None and final_status == StepStatus.COMPLETED:
+            # Resilience plan (2026-05-02): un pipeline puede acabar
+            # COMPLETED con dubbing parcial (tras retries irreparables).
+            # Surfacearlo en batch.last_error para que el batch nocturno
+            # lo destaque al usuario aunque el pipeline en sí no esté
+            # marcado FAILED.
+            for s in final.steps:
+                if (
+                    s.name == "dubbing"
+                    and s.status == StepStatus.COMPLETED
+                    and s.message
+                    and s.message.startswith("Doblaje parcial")
+                ):
+                    label = Path(path).name
+                    batch.last_error = f"{label}: {s.message}"
+                    log.warning(
+                        "[batch %s] partial dubbing surfaced: %s",
+                        batch.batch_id, batch.last_error,
+                    )
+                    break
 
         if pmod._batch_cancel.get(batch.batch_id):
             batch.status = StepStatus.CANCELLED
@@ -441,6 +516,156 @@ async def run_batch(batch) -> None:
         "[batch %s] completed all %d seasons",
         batch.batch_id, len(batch.paths),
     )
+
+
+async def _dubbing_retry_if_partial(
+    pipeline: PipelineInfo,
+    step,
+    step_index: int,
+    queue: asyncio.Queue,
+) -> Optional[bool]:
+    """Verifica capítulos doblados en disco; reintenta hasta MAX_RETRIES.
+
+    Llamado desde ``run_step`` cuando dubbing entra en un terminal
+    legítimo (``done`` o stream cerrado limpio) o un ``BackendError``
+    (e.g. 404 porque el container del backend murió).
+
+    Returns:
+        * ``None`` si no procede retry (todos completos, total==0, o
+          step no es dubbing). El caller continúa con la lógica normal
+          de COMPLETED.
+        * ``True`` si tras retries (o sin retries necesarios pero con
+          partial irreparable) ha emitido ``step_completed`` con
+          warning. El caller debe ``return True`` directamente.
+        * ``False`` si el retry fue cancelado por el usuario. El caller
+          debe ``return False``.
+
+    El payload de retry usa ``force=False`` hardcoded — nunca borrar
+    capítulos buenos durante retries.
+    """
+    pmod = _shim()
+    from .skip_detector import season_already_dubbed
+
+    target = pmod._target_dir(pipeline)
+    season_dir = Path(pipeline.chained_path) if pipeline.chained_path else target
+    if season_dir is None or not season_dir.is_dir():
+        return None
+
+    all_done, dubbed, total = season_already_dubbed(season_dir)
+    if total == 0 or all_done:
+        return None  # nada que reintentar
+
+    attempts_done = pipeline.options.get("_dubbing_attempts", 0)
+
+    for retry_idx in range(attempts_done, DUBBING_MAX_RETRIES):
+        # Cancelación entre intentos
+        if pmod._pipeline_cancel.get(pipeline.pipeline_id):
+            step.status = StepStatus.CANCELLED
+            step.completed_at = datetime.now(timezone.utc).isoformat()
+            step.message = "cancelled by user"
+            await _emit(pipeline, queue, {
+                "type": "step_failed",
+                "step": step.name,
+                "step_index": step_index,
+                "message": "cancelled by user",
+            })
+            return False
+
+        await asyncio.sleep(DUBBING_RETRY_BACKOFF_S)
+
+        # Health-poll del backend (mismo patrón que flush_gpu_after_step)
+        client_for_retry, payload_for_retry, use_oracle_retry = pmod._client_and_payload(
+            step.name, pipeline.path,
+            {**pipeline.options, "force": False},  # NUNCA borrar capítulos buenos en retry
+            pipeline.chained_path,
+        )
+        healthy = False
+        for _ in range(20):  # 20 * 5s = 100s window
+            try:
+                await client_for_retry.health()
+                healthy = True
+                break
+            except Exception:
+                await asyncio.sleep(5)
+        if not healthy:
+            step.message = (
+                f"Doblaje parcial: {dubbed}/{total} capítulos. "
+                f"Backend no responde tras {retry_idx} reintento(s)."
+            )
+            break
+
+        # Re-emit log para que UI vea el retry
+        await _emit(pipeline, queue, {
+            "type": "log",
+            "data": {
+                "message": (
+                    f"Reintentando dubbing ({retry_idx + 1}/{DUBBING_MAX_RETRIES}). "
+                    f"Pendientes: {total - dubbed}/{total}"
+                ),
+            },
+        })
+
+        # Mark this attempt so a subsequent invocation (e.g. another
+        # run_step on the same pipeline) doesn't re-burn retries.
+        pipeline.options["_dubbing_attempts"] = retry_idx + 1
+
+        try:
+            remote_id2 = await (
+                client_for_retry.run_oracle(payload_for_retry)
+                if use_oracle_retry
+                else client_for_retry.run(payload_for_retry)
+            )
+            async for evt2 in client_for_retry.stream(remote_id2):
+                if isinstance(evt2, dict):
+                    evt2 = normalize(evt2)
+                if evt2.message:
+                    step.message = evt2.message
+                if evt2.progress is not None:
+                    step.progress = evt2.progress
+                if evt2.kind in ("done", "error"):
+                    break
+                if evt2.message or evt2.progress is not None:
+                    await _emit(pipeline, queue, {
+                        "type": "step_progress",
+                        "step": step.name,
+                        "step_index": step_index,
+                        "message": evt2.message or "",
+                        "progress": step.progress,
+                    })
+        except asyncio.CancelledError:
+            raise
+        except Exception as exc:
+            log.warning(
+                "[pipeline:%s] dubbing retry %d failed: %s",
+                pipeline.pipeline_id, retry_idx + 1, exc,
+            )
+
+        # Re-verificar capítulos en disco
+        all_done, dubbed, total = season_already_dubbed(season_dir)
+        if all_done:
+            break
+
+    if all_done:
+        return None  # caller toma la rama COMPLETED normal
+
+    # Tras todos los retries posibles: marcar COMPLETED con warning
+    pendientes = total - dubbed
+    step.message = (
+        f"Doblaje parcial: {dubbed}/{total} capítulos. "
+        f"Pendientes: {pendientes}. (tras {DUBBING_MAX_RETRIES} reintentos)"
+    )
+    step.status = StepStatus.COMPLETED
+    step.progress = 100.0
+    step.completed_at = datetime.now(timezone.utc).isoformat()
+    await _emit(pipeline, queue, {
+        "type": "step_completed",
+        "step": step.name,
+        "step_index": step_index,
+        "progress": 100,
+        "message": step.message,
+        "warning": True,  # señal extra para UI si la quiere usar
+    })
+    return True
 
 
 def refresh_scan_cache_for(pipeline_path: str) -> None:

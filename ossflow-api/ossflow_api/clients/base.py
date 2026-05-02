@@ -75,32 +75,30 @@ class BackendClient:
         Reconecta en disconnect transitorios hasta ``max_reconnects`` veces.
         Termina cuando llega un evento terminal (done/error).
 
-        Manejo de 404: si una reconexión recibe 404 *después* de que ya hayamos
-        visto al menos un evento, el job casi seguro completó y se reapeó del
-        registry en memoria del backend entre nuestros intentos de reconexión
-        (o el backend reinició para liberar VRAM). Tratamos eso como "stream
-        cerrado limpiamente" en vez de error backend — la alternativa sería
-        marcar un step exitoso como FAILED, que observamos en jobs de doblaje
-        largos (~70 min) donde las transiciones síntesis→mezcla→mux pueden
-        estar silenciosas >120 s y disparar el read timeout.
+        Manejo de 404 (post 2026-05-02 resilience plan): siempre lanza
+        ``BackendError``. Antes asumíamos "404 tras ver eventos = job
+        completó y se reapeó", pero eso enmascaraba el modo de fallo
+        crítico: si el container del backend muere (OOM, panic) a mitad
+        de un job, el registry se evapora junto con el proceso y un
+        reconnect ve 404 — lo asumíamos éxito y marcábamos el step
+        COMPLETED con sólo 2-3/9 capítulos doblados.
 
-        404 en el primer intento (sin eventos vistos aún) sigue lanzando — eso
-        es un "job_id no encontrado" genuino y probablemente bug del caller.
+        Ahora el caller (runner del orquestador) recibe ``BackendError``
+        y debe verificar el filesystem para distinguir:
+          * "completó y se reapeó tras retention TTL" → todos los
+            outputs presentes → seguir como COMPLETED.
+          * "container murió" → outputs incompletos → reintentar.
+
+        El service_kit gana retention TTL para que reconexiones rápidas
+        (<2 min) tras un done legítimo sigan viendo el evento terminal y
+        no entren aquí. Solo cae aquí cuando el job realmente se evaporó.
         """
         url = f"{self.base_url}/events/{job_id}"
         attempts = 0
-        seen_any_event = False
         while True:
             try:
                 async with httpx.AsyncClient(timeout=_STREAM_TIMEOUT) as client:
                     async with client.stream("GET", url) as resp:
-                        if resp.status_code == 404 and seen_any_event:
-                            log.info(
-                                "SSE 404 on reconnect for %s — job likely "
-                                "completed and reaped, treating as clean close",
-                                url,
-                            )
-                            return
                         if resp.status_code >= 400:
                             raise BackendError(
                                 f"stream {resp.status_code} on {url}"
@@ -113,7 +111,6 @@ class BackendClient:
                                     buffer = []
                                     if raw is not None:
                                         evt = normalize(raw)
-                                        seen_any_event = True
                                         yield evt
                                         if is_terminal(evt):
                                             return
