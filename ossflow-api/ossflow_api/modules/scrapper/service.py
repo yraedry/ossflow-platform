@@ -14,7 +14,7 @@ Responsabilidades preservadas literalmente del antiguo
   bordes negros).
 * Heurísticas para derivar título/autor desde el nombre de la carpeta
   cuando el sidecar no los trae.
-* Proxy HTTP hacia los endpoints ``/oracle/*`` del backend.
+* Proxy HTTP hacia los endpoints ``/scrapper/*`` del backend.
 
 Cambios estructurales:
 
@@ -458,8 +458,8 @@ class ScrapperService:
     # ------------------------------------------------------------------
 
     async def list_providers(self) -> Any:
-        """Proxy GET a ``chapter-splitter /oracle/providers``."""
-        url = f"{self._splitter_url}/oracle/providers"
+        """Proxy GET a ``chapter-splitter /scrapper/providers``."""
+        url = f"{self._splitter_url}/scrapper/providers"
         try:
             async with httpx.AsyncClient(timeout=DEFAULT_TIMEOUT) as client:
                 r = await client.get(url)
@@ -489,7 +489,7 @@ class ScrapperService:
         instructional_path: str,
         body: dict[str, Any],
     ) -> Any:
-        """Proxy ``/oracle/search`` con title/author derivados del folder."""
+        """Proxy ``/scrapper/search`` con title/author derivados del folder."""
         folder = self._resolve_instructional(instructional_path)
         provider_id = body.get("provider_id")  # puede ser None (autodetect)
         override_title = body.get("title")
@@ -506,7 +506,7 @@ class ScrapperService:
         if provider_id is not None:
             payload["provider_id"] = provider_id
 
-        url = f"{self._splitter_url}/oracle/search"
+        url = f"{self._splitter_url}/scrapper/search"
         try:
             async with httpx.AsyncClient(timeout=DEFAULT_TIMEOUT) as client:
                 r = await client.post(url, json=payload)
@@ -537,7 +537,7 @@ class ScrapperService:
             raise _InvalidOracle("body must include 'url' string")
 
         target_url = body["url"]
-        backend_url = f"{self._splitter_url}/oracle/scrape"
+        backend_url = f"{self._splitter_url}/scrapper/scrape"
         try:
             async with httpx.AsyncClient(timeout=DEFAULT_TIMEOUT) as client:
                 r = await client.post(backend_url, json={"url": target_url})

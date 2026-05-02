@@ -1,9 +1,8 @@
-"""Módulo scrapper: proxy/orquestador del subsistema oracle del backend.
+"""Módulo scrapper: proxy/orquestador del subsistema scrapper del backend.
 
-Renombrado completo (Plan 2 T24 + T_LATE_1): paquete Python, prefix HTTP
-(``/api/scrapper``), tags OpenAPI, frontend feature. El subsistema del
-microservicio chapter-splitter sigue exponiéndose internamente como
-``/oracle/*`` (no es API pública).
+Renombrado completo (Plan 2 T24 + T_LATE_1 + T_LATE_3): paquete Python,
+prefix HTTP (``/api/scrapper``), tags OpenAPI, frontend feature, y
+endpoints internos del microservicio chapter-splitter (``/scrapper/*``).
 """
 
 from .router import router as scrapper_router
