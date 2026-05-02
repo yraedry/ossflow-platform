@@ -20,7 +20,7 @@ ENV DEBIAN_FRONTEND=noninteractive
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
         build-essential cmake git ca-certificates pkg-config \
-        libvulkan-dev glslang-tools glslang-dev spirv-tools \
+        libvulkan-dev glslang-tools glslc \
  && rm -rf /var/lib/apt/lists/*
 
 RUN git clone --recurse-submodules ${S2CPP_REPO} /src/s2.cpp \
