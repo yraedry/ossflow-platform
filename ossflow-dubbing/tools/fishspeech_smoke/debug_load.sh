@@ -23,7 +23,10 @@ docker run --rm -it \
     -v "$FISH_REPO_DIR_HOST:/work/fish-speech" \
     -v "$VOICE_WAV:/work/ref.wav:ro" \
     nvidia/cuda:12.4.1-runtime-ubuntu22.04 bash -c '
-set -euo pipefail
+# `set -e` mata el script ante cualquier rc!=0 — fatal para un debug
+# script donde queremos que cada test corra aunque otro falle. Solo
+# pipefail + nounset.
+set -uo pipefail
 
 # Asume que /work/fish-speech YA está cacheado del smoke_test previo
 # (mismo bind-mount). Si no está, lo clonamos. Igual con deps Python:
@@ -82,7 +85,10 @@ echo "Snapshot: $MODEL_SNAP"
 
 # Verifica que los blobs son leíbles (los .safetensors son symlinks)
 echo "--- check files ---"
-file "$MODEL_SNAP/codec.pth" "$MODEL_SNAP/model-00001-of-00002.safetensors" 2>&1 | head -5
+stat -L --printf="%n: %s bytes\n" \
+    "$MODEL_SNAP/codec.pth" \
+    "$MODEL_SNAP/model-00001-of-00002.safetensors" \
+    "$MODEL_SNAP/model-00002-of-00002.safetensors" 2>&1
 ls -laL "$MODEL_SNAP/codec.pth" "$MODEL_SNAP/model-00001-of-00002.safetensors" 2>&1 | head -5
 
 # Test 1: ¿pytorch puede leer el codec.pth standalone?
