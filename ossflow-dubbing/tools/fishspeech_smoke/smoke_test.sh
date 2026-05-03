@@ -90,11 +90,20 @@ fi
 #   4. Lanza CLI inferencia con voice clone.
 #   5. Mide tiempo wall-clock y guarda WAV resultado.
 
+# Bind-mount cache pip + repo fish-speech entre runs para no
+# reinstalar todo cada iteración (~5 min ganados después del primer
+# run).
+PIP_CACHE_DIR_HOST="${MODELS_DIR%/*}/fishspeech-pip-cache"
+FISH_REPO_DIR_HOST="${MODELS_DIR%/*}/fish-speech-src"
+mkdir -p "$PIP_CACHE_DIR_HOST" "$FISH_REPO_DIR_HOST"
+
 docker run --rm \
     --runtime=nvidia \
     --gpus all \
     -e NVIDIA_DRIVER_CAPABILITIES=compute,utility \
     -v "$MODELS_DIR:/root/.cache/huggingface" \
+    -v "$PIP_CACHE_DIR_HOST:/root/.cache/pip" \
+    -v "$FISH_REPO_DIR_HOST:/work/fish-speech" \
     -v "$VOICE_WAV:/work/ref.wav:ro" \
     -v "$(dirname "$OUT_WAV"):/out" \
     -e FISH_REF="$FISH_REF" \
@@ -117,10 +126,17 @@ apt-get install -y --no-install-recommends -qq \
     > /dev/null 2>&1
 ln -sf /usr/bin/python3 /usr/local/bin/python
 
-echo "--- Stage 2: clone fish-speech @ $FISH_REF ---"
-git clone --depth 50 https://github.com/fishaudio/fish-speech.git /work/fish-speech
-cd /work/fish-speech
-git checkout "$FISH_REF" 2>/dev/null || echo "(staying on default branch)"
+echo "--- Stage 2: clone/update fish-speech @ $FISH_REF ---"
+if [ -d /work/fish-speech/.git ]; then
+    cd /work/fish-speech
+    git fetch --depth 50 origin
+    git checkout "$FISH_REF" 2>/dev/null || true
+    git pull --ff-only 2>/dev/null || true
+else
+    git clone --depth 50 https://github.com/fishaudio/fish-speech.git /work/fish-speech
+    cd /work/fish-speech
+    git checkout "$FISH_REF" 2>/dev/null || echo "(staying on default branch)"
+fi
 
 echo "--- Stage 3: pip install ---"
 pip install --no-cache-dir --upgrade pip > /dev/null
@@ -181,25 +197,48 @@ echo "--- api_server --help ---"
 python -m tools.api_server --help 2>&1 | head -40 || true
 
 echo
+echo "--- discovering decoder configs ---"
+# Lista qué decoder configs vienen con esta versión
+CONFIGS_DIR="/work/fish-speech/fish_speech/configs"
+if [ -d "$CONFIGS_DIR" ]; then
+    echo "Configs disponibles ($CONFIGS_DIR):"
+    ls "$CONFIGS_DIR" 2>&1 | grep -E "\\.yaml$" | sed "s/^/  - /"
+fi
+
+# El decoder checkpoint suele ser el codec.pth dentro del snapshot
+DECODER_CKPT="$MODEL_SNAP/codec.pth"
+if [ ! -f "$DECODER_CKPT" ]; then
+    echo "WARN: $DECODER_CKPT no existe. Usando snapshot dir como fallback."
+    DECODER_CKPT="$MODEL_SNAP"
+fi
+
+# Probar varios nombres de config conocidos en orden histórico
+DECODER_CFG="${DECODER_CFG:-modded_dac_vq}"
+echo "Decoder checkpoint: $DECODER_CKPT"
+echo "Decoder config: $DECODER_CFG (override con DECODER_CFG=...)"
+
 echo "--- starting api_server in background ---"
-# Sin saber los argumentos exactos, intentamos lo más sensato basado
-# en el patrón estándar de fish-speech: pasar --listen, --workers, y
-# el path del modelo. Si falla, el log dirá qué falta.
+# --half = bf16 (ahorra ~50% VRAM, casi sin pérdida de calidad).
+# Sin --half el modelo en fp32 son ~12 GB que NO entran en 6 GB.
 python -m tools.api_server \
+    --mode tts \
     --listen "0.0.0.0:${API_PORT}" \
     --llama-checkpoint-path "$MODEL_SNAP" \
-    --decoder-checkpoint-path "$MODEL_SNAP" \
-    --decoder-config-name modded_dac_vq \
+    --decoder-checkpoint-path "$DECODER_CKPT" \
+    --decoder-config-name "$DECODER_CFG" \
+    --device cuda \
+    --half \
     > "$SERVER_LOG" 2>&1 &
 SERVER_PID=$!
 echo "Server PID: $SERVER_PID"
 
-# Espera a que esté listo (probe HTTP)
-echo "Waiting for server ready..."
-for i in $(seq 1 60); do
+# Espera a que esté listo. Modelo S2-Pro tarda 30-90s en cargar a
+# VRAM (compile + warmup). Damos 180s de margen.
+echo "Waiting for server ready (max 180s)..."
+for i in $(seq 1 180); do
     if ! kill -0 $SERVER_PID 2>/dev/null; then
-        echo "FATAL: server died during boot. Last log lines:"
-        tail -40 "$SERVER_LOG"
+        echo "FATAL: server died at t=${i}s. Last 60 log lines:"
+        tail -60 "$SERVER_LOG"
         exit 1
     fi
     if curl -sf "http://127.0.0.1:${API_PORT}/" > /dev/null 2>&1 \
@@ -207,6 +246,11 @@ for i in $(seq 1 60); do
        || curl -sf "http://127.0.0.1:${API_PORT}/health" > /dev/null 2>&1; then
         echo "Server up after ${i}s"
         break
+    fi
+    # Progreso cada 10s para que no parezca colgado
+    if [ $((i % 10)) -eq 0 ]; then
+        echo "  ... still waiting at t=${i}s. Server log tail:"
+        tail -3 "$SERVER_LOG" | sed "s/^/    /"
     fi
     sleep 1
 done
