@@ -140,12 +140,18 @@ print(f\"Downloaded to {path} in {time.time()-t0:.0f}s\")
 "
 
 echo "--- Stage 5: GPU sanity ---"
-python -c "
+python <<PYGPU
 import torch
-print(f\"CUDA available: {torch.cuda.is_available()}\")
-print(f\"Device: {torch.cuda.get_device_name(0) if torch.cuda.is_available() else \"none\"}\")
-print(f\"VRAM total: {torch.cuda.get_device_properties(0).total_memory / 1e9:.1f}GB\" if torch.cuda.is_available() else \"\")
-"
+ok = torch.cuda.is_available()
+print(f"CUDA available: {ok}")
+if ok:
+    name = torch.cuda.get_device_name(0)
+    vram = torch.cuda.get_device_properties(0).total_memory / 1e9
+    print(f"Device: {name}")
+    print(f"VRAM total: {vram:.1f} GB")
+else:
+    print("Device: none")
+PYGPU
 
 echo "--- Stage 6: synthesize test phrase ---"
 # fish-speech expone varios entrypoints. El más estable para voice
@@ -153,69 +159,108 @@ echo "--- Stage 6: synthesize test phrase ---"
 # `tools/vqgan/inference.py` para decode. Pero hay un wrapper más
 # nuevo en `tools/api_server.py` que sirve HTTP. Para este smoke test
 # uso el script python directo más simple.
-python - <<PYEOF
-import time, sys
+python <<PYINFER
+import os, sys, time, traceback
+
 sys.path.insert(0, "/work/fish-speech")
 
-# Importar el inference helper top-level. Si la API ha cambiado en
-# main, ajustaremos en el siguiente intento.
-try:
-    from tools.api_server import inference_engine
-except ImportError as e:
-    print(f"NOTE: tools.api_server import failed ({e})")
-    print("Trying fish_speech.inference instead...")
+ref_wav  = "/work/ref.wav"
+ref_txt  = os.environ["VOICE_TXT"]
+text     = os.environ["TEST_TEXT"]
+out_name = os.environ["OUT_NAME"]
+out_path = "/out/" + out_name
+
+print("Reference:      " + ref_wav)
+print("Reference text: " + ref_txt[:80] + ("..." if len(ref_txt) > 80 else ""))
+print("Text:           " + text)
+print("Output:         " + out_path)
+
+# La API de inferencia interna de fish-speech cambia entre releases.
+# Probamos importar las opciones más comunes; si TODAS fallan, el log
+# de tracebacks dice qué módulos hay disponibles para que ajustemos
+# el script en la siguiente iteración.
+imported = None
+errors = []
+for path in (
+    "tools.api_server",
+    "tools.api",
+    "fish_speech.inference_engine",
+    "fish_speech.api",
+):
     try:
-        from fish_speech.models.text2semantic.inference import generate_long
-        from fish_speech.models.vqgan.inference import wav_inference
-    except ImportError as e2:
-        print(f"FATAL: cannot find inference API: {e2}")
-        sys.exit(2)
+        mod = __import__(path, fromlist=["*"])
+        imported = (path, mod)
+        print(f"Imported OK: {path}")
+        break
+    except Exception as e:
+        errors.append((path, type(e).__name__, str(e)))
 
-import os
-ref_wav = "/work/ref.wav"
-ref_txt = os.environ["VOICE_TXT"]
-text = os.environ["TEST_TEXT"]
-out_path = f"/out/{os.environ[\"OUT_NAME\"]}"
+if imported is None:
+    print("FATAL: ningún módulo de inferencia importable")
+    for p, t, m in errors:
+        print(f"  - {p}: {t}: {m}")
+    print("\nContenidos de /work/fish-speech/tools/:")
+    for f in sorted(os.listdir("/work/fish-speech/tools")):
+        print(f"  {f}")
+    print("\nContenidos de /work/fish-speech/fish_speech/:")
+    for f in sorted(os.listdir("/work/fish-speech/fish_speech")):
+        print(f"  {f}")
+    sys.exit(2)
 
-print(f"Reference: {ref_wav}")
-print(f"Reference text: {ref_txt[:80]}...")
-print(f"Text to synthesize: {text}")
-print(f"Output: {out_path}")
+# Sondeo de qué expone el módulo
+mod_name, mod = imported
+print(f"\nAtributos públicos de {mod_name}:")
+for attr in sorted(dir(mod)):
+    if not attr.startswith("_"):
+        print(f"  - {attr}")
 
+# Intento de llamada — varios shape posibles
 t0 = time.time()
-# Aquí va la llamada real — el código exacto depende de la API
-# disponible (api_server vs scripts directos). Lo metemos en un bloque
-# que catch cualquier diferencia de firma y reporte qué hay disponible.
 try:
-    # Most likely path: api_server expone una función inference()
-    # que acepta text + reference_audio + reference_text y devuelve WAV bytes.
-    result = inference_engine.inference(
-        text=text,
-        reference_audio=ref_wav,
-        reference_text=ref_txt,
-    )
+    if hasattr(mod, "inference_engine"):
+        engine = mod.inference_engine
+        print(f"\nEngine type: {type(engine).__name__}")
+        result = engine.inference(
+            text=text,
+            reference_audio=ref_wav,
+            reference_text=ref_txt,
+        )
+    elif hasattr(mod, "inference"):
+        result = mod.inference(
+            text=text,
+            reference_audio=ref_wav,
+            reference_text=ref_txt,
+        )
+    else:
+        print("FATAL: módulo importado pero sin entry obvio (.inference_engine ni .inference)")
+        sys.exit(3)
     with open(out_path, "wb") as f:
-        f.write(result)
+        if isinstance(result, (bytes, bytearray)):
+            f.write(result)
+        else:
+            print("WARNING: result no es bytes; type=" + type(result).__name__)
+            print("Repr corto: " + repr(result)[:200])
+            sys.exit(4)
+except SystemExit:
+    raise
 except Exception as e:
     print(f"FATAL during inference: {type(e).__name__}: {e}")
-    import traceback; traceback.print_exc()
-    sys.exit(3)
+    traceback.print_exc()
+    sys.exit(5)
 
 elapsed = time.time() - t0
-print(f"\n=== SMOKE TEST RESULT ===")
-print(f"Latency: {elapsed:.1f}s")
+print("\n=== SMOKE TEST RESULT ===")
+print(f"Latency: {elapsed:.1f} s")
 print(f"Output WAV: {out_path}")
-import os.path
-print(f"Output size: {os.path.getsize(out_path)/1024:.1f} KB")
+print(f"Output size: {os.path.getsize(out_path) / 1024:.1f} KB")
 
-# VRAM final
 import torch
 if torch.cuda.is_available():
     used = torch.cuda.memory_allocated() / 1e9
     reserved = torch.cuda.memory_reserved() / 1e9
     print(f"VRAM allocated: {used:.2f} GB")
     print(f"VRAM reserved:  {reserved:.2f} GB")
-PYEOF
+PYINFER
 
 echo
 echo "=== smoke test done ==="
