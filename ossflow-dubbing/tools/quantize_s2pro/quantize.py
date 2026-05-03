@@ -169,19 +169,16 @@ def quantize_gguf(src: Path, dst: Path, qtype_name: str) -> None:
 
         log.info("[%d/%d] quant  %-50s shape=%s -> %s",
                  i, n_total, name, shape, qtype_name.upper())
-        # Reshape a la forma original (la lib espera el shape en
-        # elementos, no en bytes). Reconstruimos float32 y delegamos en
-        # gguf.quants.quantize, que devuelve un array de bytes con el
-        # layout exacto del quant pedido + dtype/shape correctos para
-        # add_tensor con raw_dtype.
+        # gguf.quants.quantize() devuelve un array uint8 con el SHAPE EN
+        # BYTES ya aplicado (ver __shape_to_bytes en gguf/quants.py).
+        # add_tensor() detecta dtype=uint8 + raw_dtype=Q* y revierte el
+        # shape de bytes a shape de elementos vía
+        # quant_shape_from_byte_shape — así que NO debemos pasar
+        # raw_shape; si lo pasamos en elementos, el writer lo trata como
+        # bytes y rompe con "X is not a multiple of type size Y".
         arr_f32 = np.asarray(raw, dtype=np.float32).reshape(shape)
         packed = gguf_quantize(arr_f32, qtype)
-        writer.add_tensor(
-            name,
-            packed,
-            raw_shape=tuple(shape),
-            raw_dtype=qtype,
-        )
+        writer.add_tensor(name, packed, raw_dtype=qtype)
         n_quantized += 1
 
     log.info("Writing header...")
