@@ -113,6 +113,7 @@ apt-get update -qq
 apt-get install -y --no-install-recommends -qq \
     python3 python3-dev python3-pip python3-venv git ffmpeg \
     build-essential portaudio19-dev libsndfile1 \
+    curl bc \
     > /dev/null 2>&1
 ln -sf /usr/bin/python3 /usr/local/bin/python
 
@@ -153,114 +154,108 @@ else:
     print("Device: none")
 PYGPU
 
-echo "--- Stage 6: synthesize test phrase ---"
-# fish-speech expone varios entrypoints. El más estable para voice
-# clone vía CLI es `tools/llama/generate.py` para tokens semánticos +
-# `tools/vqgan/inference.py` para decode. Pero hay un wrapper más
-# nuevo en `tools/api_server.py` que sirve HTTP. Para este smoke test
-# uso el script python directo más simple.
-python <<PYINFER
-import os, sys, time, traceback
+echo "--- Stage 6: launch HTTP server + POST test phrase ---"
+# tools.api_server es un servidor HTTP (Kui+uvicorn) idéntico en
+# patrón a s2.cpp --server. Lo arrancamos en background, esperamos a
+# que esté ready en su puerto, y mandamos un POST con la frase de
+# test + ref WAV + transcript. Mide latencia wall-clock del POST y
+# VRAM tras el primer hit.
 
-sys.path.insert(0, "/work/fish-speech")
+API_PORT="${API_PORT:-8080}"
+SERVER_LOG=/tmp/fish_server.log
+rm -f "$SERVER_LOG"
 
-ref_wav  = "/work/ref.wav"
-ref_txt  = os.environ["VOICE_TXT"]
-text     = os.environ["TEST_TEXT"]
-out_name = os.environ["OUT_NAME"]
-out_path = "/out/" + out_name
+# Localiza el modelo descargado
+MODEL_SNAP=$(ls -d /root/.cache/huggingface/hub/models--fishaudio--s2-pro/snapshots/*/ 2>/dev/null | head -1)
+if [ -z "$MODEL_SNAP" ]; then
+    echo "FATAL: model snapshot dir not found"
+    exit 1
+fi
+echo "Model snapshot: $MODEL_SNAP"
+echo "Files in snapshot:"
+ls -la "$MODEL_SNAP" | head -20
 
-print("Reference:      " + ref_wav)
-print("Reference text: " + ref_txt[:80] + ("..." if len(ref_txt) > 80 else ""))
-print("Text:           " + text)
-print("Output:         " + out_path)
+# Arranca el servidor. Vemos qué argumentos acepta primero (--help).
+echo
+echo "--- api_server --help ---"
+python -m tools.api_server --help 2>&1 | head -40 || true
 
-# La API de inferencia interna de fish-speech cambia entre releases.
-# Probamos importar las opciones más comunes; si TODAS fallan, el log
-# de tracebacks dice qué módulos hay disponibles para que ajustemos
-# el script en la siguiente iteración.
-imported = None
-errors = []
-for path in (
-    "tools.api_server",
-    "tools.api",
-    "fish_speech.inference_engine",
-    "fish_speech.api",
-):
-    try:
-        mod = __import__(path, fromlist=["*"])
-        imported = (path, mod)
-        print(f"Imported OK: {path}")
+echo
+echo "--- starting api_server in background ---"
+# Sin saber los argumentos exactos, intentamos lo más sensato basado
+# en el patrón estándar de fish-speech: pasar --listen, --workers, y
+# el path del modelo. Si falla, el log dirá qué falta.
+python -m tools.api_server \
+    --listen "0.0.0.0:${API_PORT}" \
+    --llama-checkpoint-path "$MODEL_SNAP" \
+    --decoder-checkpoint-path "$MODEL_SNAP" \
+    --decoder-config-name modded_dac_vq \
+    > "$SERVER_LOG" 2>&1 &
+SERVER_PID=$!
+echo "Server PID: $SERVER_PID"
+
+# Espera a que esté listo (probe HTTP)
+echo "Waiting for server ready..."
+for i in $(seq 1 60); do
+    if ! kill -0 $SERVER_PID 2>/dev/null; then
+        echo "FATAL: server died during boot. Last log lines:"
+        tail -40 "$SERVER_LOG"
+        exit 1
+    fi
+    if curl -sf "http://127.0.0.1:${API_PORT}/" > /dev/null 2>&1 \
+       || curl -sf "http://127.0.0.1:${API_PORT}/v1/models" > /dev/null 2>&1 \
+       || curl -sf "http://127.0.0.1:${API_PORT}/health" > /dev/null 2>&1; then
+        echo "Server up after ${i}s"
         break
-    except Exception as e:
-        errors.append((path, type(e).__name__, str(e)))
+    fi
+    sleep 1
+done
 
-if imported is None:
-    print("FATAL: ningún módulo de inferencia importable")
-    for p, t, m in errors:
-        print(f"  - {p}: {t}: {m}")
-    print("\nContenidos de /work/fish-speech/tools/:")
-    for f in sorted(os.listdir("/work/fish-speech/tools")):
-        print(f"  {f}")
-    print("\nContenidos de /work/fish-speech/fish_speech/:")
-    for f in sorted(os.listdir("/work/fish-speech/fish_speech")):
-        print(f"  {f}")
-    sys.exit(2)
+if ! kill -0 $SERVER_PID 2>/dev/null; then
+    echo "FATAL: server died waiting for ready. Log:"
+    tail -60 "$SERVER_LOG"
+    exit 1
+fi
 
-# Sondeo de qué expone el módulo
-mod_name, mod = imported
-print(f"\nAtributos públicos de {mod_name}:")
-for attr in sorted(dir(mod)):
-    if not attr.startswith("_"):
-        print(f"  - {attr}")
+echo
+echo "--- server log so far (head) ---"
+head -50 "$SERVER_LOG"
+echo
+echo "--- discovering routes ---"
+curl -s "http://127.0.0.1:${API_PORT}/openapi.json" 2>/dev/null \
+    | python -c "import json,sys; d=json.load(sys.stdin); print(json.dumps(list(d.get('paths',{}).keys()),indent=2))" \
+    2>/dev/null \
+    || echo "(no openapi.json available)"
 
-# Intento de llamada — varios shape posibles
-t0 = time.time()
-try:
-    if hasattr(mod, "inference_engine"):
-        engine = mod.inference_engine
-        print(f"\nEngine type: {type(engine).__name__}")
-        result = engine.inference(
-            text=text,
-            reference_audio=ref_wav,
-            reference_text=ref_txt,
-        )
-    elif hasattr(mod, "inference"):
-        result = mod.inference(
-            text=text,
-            reference_audio=ref_wav,
-            reference_text=ref_txt,
-        )
-    else:
-        print("FATAL: módulo importado pero sin entry obvio (.inference_engine ni .inference)")
-        sys.exit(3)
-    with open(out_path, "wb") as f:
-        if isinstance(result, (bytes, bytearray)):
-            f.write(result)
-        else:
-            print("WARNING: result no es bytes; type=" + type(result).__name__)
-            print("Repr corto: " + repr(result)[:200])
-            sys.exit(4)
-except SystemExit:
-    raise
-except Exception as e:
-    print(f"FATAL during inference: {type(e).__name__}: {e}")
-    traceback.print_exc()
-    sys.exit(5)
+echo
+echo "--- POST /v1/tts test ---"
+# Curl multipart con el ref + texto. Endpoint estándar fish-speech
+# es /v1/tts; ajustaremos si openapi muestra otro nombre.
+t0=$(date +%s.%N)
+curl -sS -X POST "http://127.0.0.1:${API_PORT}/v1/tts" \
+    -F "text=$TEST_TEXT" \
+    -F "reference_audio=@/work/ref.wav" \
+    -F "reference_text=$VOICE_TXT" \
+    -o "/out/$OUT_NAME" \
+    -w "HTTP %{http_code}, %{size_download} bytes\n" \
+    || { echo "POST failed; last server log:"; tail -30 "$SERVER_LOG"; }
+t1=$(date +%s.%N)
+elapsed=$(echo "$t1 - $t0" | bc -l)
 
-elapsed = time.time() - t0
-print("\n=== SMOKE TEST RESULT ===")
-print(f"Latency: {elapsed:.1f} s")
-print(f"Output WAV: {out_path}")
-print(f"Output size: {os.path.getsize(out_path) / 1024:.1f} KB")
+echo
+echo "=== SMOKE TEST RESULT ==="
+printf "Latency: %.1f s\n" "$elapsed"
+if [ -f "/out/$OUT_NAME" ]; then
+    ls -la "/out/$OUT_NAME"
+fi
 
-import torch
-if torch.cuda.is_available():
-    used = torch.cuda.memory_allocated() / 1e9
-    reserved = torch.cuda.memory_reserved() / 1e9
-    print(f"VRAM allocated: {used:.2f} GB")
-    print(f"VRAM reserved:  {reserved:.2f} GB")
-PYINFER
+# Cleanup
+kill $SERVER_PID 2>/dev/null || true
+wait $SERVER_PID 2>/dev/null || true
+
+echo
+echo "--- final server log tail ---"
+tail -30 "$SERVER_LOG"
 
 echo
 echo "=== smoke test done ==="
