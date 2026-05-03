@@ -49,9 +49,29 @@ if ! python -c "import fish_speech" 2>/dev/null; then
     pip install --no-cache-dir torch==2.6.0 torchaudio==2.6.0 \
         --index-url https://download.pytorch.org/whl/cu124 > /tmp/pip.log 2>&1 \
       || { echo "FAIL torch"; tail -30 /tmp/pip.log; exit 1; }
-    pip install --no-cache-dir -e . > /tmp/pip.log 2>&1 \
-      || { echo "FAIL fish-speech"; tail -30 /tmp/pip.log; exit 1; }
+    # En lugar de instalar el paquete, instalamos sus deps + usamos
+    # PYTHONPATH para imports. PEP 660 (editable installs) lo rompe en
+    # el pyproject de fish-speech main; install no-editable mete el
+    # paquete en site-packages y los `python -m tools.api_server`
+    # quedan inconsistentes con el clone.
+    if [ -f pyproject.toml ]; then
+        # Saca deps de pyproject (manera limpia: pip install . falla;
+        # pero `pip install --dry-run` resuelve y muestra. Usamos un
+        # truco: pip install la versión publicada del paquete (si
+        # existe) trae las mismas deps sin tocar nuestro source local.
+        pip install --no-cache-dir fish-speech > /tmp/pip.log 2>&1 || true
+        # Si fish-speech no está en PyPI, instalamos las deps comunes
+        # explícitamente. Todas vienen ya con torch o son ligeras.
+        pip install --no-cache-dir \
+            transformers tokenizers accelerate einops loguru pyrootutils \
+            "kui[asgi]" uvicorn[standard] httpx multipart msgpack \
+            librosa soundfile numpy hydra-core omegaconf \
+            descript-audio-codec descript-audiotools \
+            > /tmp/pip2.log 2>&1 \
+          || { echo "FAIL deps"; tail -30 /tmp/pip2.log; exit 1; }
+    fi
 fi
+export PYTHONPATH=/work/fish-speech:${PYTHONPATH:-}
 cd /work/fish-speech
 
 # py-spy para profile en vivo

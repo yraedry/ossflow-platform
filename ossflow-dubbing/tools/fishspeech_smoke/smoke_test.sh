@@ -144,8 +144,20 @@ pip install --no-cache-dir --upgrade pip > /dev/null
 pip install --no-cache-dir torch==2.6.0 torchaudio==2.6.0 \
     --index-url https://download.pytorch.org/whl/cu124 > /tmp/pip.log 2>&1 \
   || { echo "FAIL: torch install"; tail -30 /tmp/pip.log; exit 1; }
-pip install --no-cache-dir -e . > /tmp/pip.log 2>&1 \
-  || { echo "FAIL: fish-speech install"; tail -50 /tmp/pip.log; exit 1; }
+# En lugar de `pip install -e .` o `pip install .` (que tienen
+# problemas con el pyproject de fish-speech main: el editable rompe
+# por PEP 660 missing, y el non-editable mete el paquete en
+# site-packages divergiendo del source que queremos ejecutar via
+# `python -m tools.api_server`), instalamos las deps explícitamente
+# y usamos PYTHONPATH para que los imports vengan del source clonado.
+pip install --no-cache-dir \
+    transformers tokenizers accelerate einops loguru pyrootutils \
+    "kui[asgi]" uvicorn[standard] httpx multipart msgpack \
+    librosa soundfile numpy hydra-core omegaconf \
+    descript-audio-codec descript-audiotools \
+    > /tmp/pip.log 2>&1 \
+  || { echo "FAIL: fish-speech deps install"; tail -50 /tmp/pip.log; exit 1; }
+export PYTHONPATH=/work/fish-speech:${PYTHONPATH:-}
 
 echo "--- Stage 4: download S2-Pro from HF ---"
 python -c "
