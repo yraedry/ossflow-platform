@@ -99,6 +99,13 @@ def _coerce_scalar(value, ftype: gguf.GGUFValueType):
     rechaza floats. Forzamos el tipo según lo que dice el field type.
     """
     raw = value.tolist() if hasattr(value, "tolist") else value
+    # `field.parts[idx]` puede ser un numpy array de 1 elemento en lugar
+    # de un escalar; en ese caso `.tolist()` devuelve [v] y necesitamos
+    # extraer el primero antes de aplicar int()/float()/bool().
+    if isinstance(raw, list):
+        if len(raw) != 1:
+            raise ValueError(f"expected scalar, got list len={len(raw)}: {raw!r}")
+        raw = raw[0]
     if ftype in _INT_TYPES:
         return int(raw)
     if ftype in _FLOAT_TYPES:
