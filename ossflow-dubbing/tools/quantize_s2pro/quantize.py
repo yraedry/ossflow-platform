@@ -75,8 +75,21 @@ KEEP_F16_PATTERNS = (
     "norm.weight",
 )
 
+# El codec (encoder/decoder de audio) ejecuta en CPU dentro de s2.cpp y
+# solo soporta tensores F16/F32 — cuantizarlos rompe el load con
+# "[Codec] unsupported tensor type for host copy". El propio HF README
+# de rodrigomt/s2-pro-gguf indica que las quants oficiales mantienen
+# `c.*` en F16. En fish-speech todos los tensores del codec usan el
+# prefijo `c.` (codec), así que matcheamos por prefijo en lugar de
+# substring para no falsear con nombres que casualmente lo contengan.
+KEEP_F16_PREFIXES = (
+    "c.",  # codec encoder + decoder + RVQ quantizer + transformer interno
+)
+
 
 def _should_keep_f16(name: str) -> bool:
+    if any(name.startswith(p) for p in KEEP_F16_PREFIXES):
+        return True
     return any(p in name for p in KEEP_F16_PATTERNS)
 
 
