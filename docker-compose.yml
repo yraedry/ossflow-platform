@@ -143,12 +143,7 @@ services:
     environment:
       - PYTHONUNBUFFERED=1
       - NVIDIA_VISIBLE_DEVICES=all
-      # `graphics` is required so nvidia-container-toolkit injects the
-      # NVIDIA Vulkan ICD (manifest + libGLX_nvidia + libnvidia-glcore)
-      # into the container. Without it, vulkaninfo only sees llvmpipe and
-      # s2.cpp falls back to CPU. See ossflow-dubbing/Dockerfile for the
-      # rationale on Vulkan over CUDA.
-      - NVIDIA_DRIVER_CAPABILITIES=compute,utility,graphics
+      - NVIDIA_DRIVER_CAPABILITIES=compute,utility
       - TORCH_HOME=/models/torch
       - HF_HOME=/models/huggingface
       - XDG_CACHE_HOME=/models/cache
@@ -179,7 +174,7 @@ services:
           devices:
             - driver: nvidia
               count: 1
-              capabilities: [gpu, compute, utility, graphics]
+              capabilities: [gpu, compute, utility]
     restart: unless-stopped
 
   ossflow-telegram:
