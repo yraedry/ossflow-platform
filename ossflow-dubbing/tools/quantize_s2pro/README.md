@@ -33,13 +33,16 @@ con `nvidia-smi -l 1` que el GPU sale del estado P8 0% mientras corre.
 
 ## Tipos soportados
 
-| Tipo | Bytes/bloque | Tamaño aprox | CUDA `get_rows` | Uso |
-|------|--------------|--------------|-----------------|-----|
-| q4_0 | 18 (32 vals) | ~3.0 GB      | ✅              | Mínimo VRAM, calidad aceptable |
-| q5_0 | 22 (32 vals) | ~4.0 GB      | ✅              | Balance recomendado para 2060 6 GB |
+Todos vienen del backend `gguf.quants` oficial de llama.cpp; el GGUF
+resultante es binariamente idéntico al que produciría `llama-quantize`.
 
-Q4_1/Q5_1 (asimétricos) se pueden añadir si Q4_0/Q5_0 dan calidad insuficiente
-en frases largas; también son CUDA-nativos.
+| `--type` | Bytes/bloque | Tamaño aprox | CUDA `get_rows` | Uso |
+|----------|--------------|--------------|-----------------|-----|
+| `q4_0`   | 18 (32 vals) | ~3.0 GB      | ✅              | Mínimo VRAM |
+| `q4_1`   | 20 (32 vals) | ~3.3 GB      | ✅              | +1 byte por bloque vs q4_0 (asimétrico) |
+| `q5_0`   | 22 (32 vals) | ~4.0 GB      | ✅              | Balance recomendado para 2060 6 GB |
+| `q5_1`   | 24 (32 vals) | ~4.3 GB      | ✅              | +1 byte por bloque vs q5_0 (asimétrico) |
+| `q8_0`   | 34 (32 vals) | ~5.6 GB      | ✅              | Calidad máxima cuantizada — OOM probable en 2060 |
 
 ## Heurística de tensores preservados en F16
 
