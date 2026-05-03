@@ -131,14 +131,6 @@ services:
       context: .
       dockerfile: ./ossflow-dubbing/Dockerfile
     container_name: ossflow-dubbing
-    # Forzar runtime nvidia. ``deploy.resources.reservations.devices``
-    # solo lo respeta Docker Swarm; en Compose standalone se ignora,
-    # el container arranca con ``runc`` y nvidia-container-toolkit
-    # NO inyecta el manifest /usr/share/vulkan/icd.d/nvidia_icd.json
-    # (sin él vulkaninfo solo ve llvmpipe y s2.cpp cae a CPU).
-    # Requiere ``"runtimes": {"nvidia": {...}}`` en /etc/docker/daemon.json
-    # y nvidia-container-toolkit instalado en el host (LXC).
-    runtime: nvidia
     ports:
       - "8003:8003"
     volumes:
