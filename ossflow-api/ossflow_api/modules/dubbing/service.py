@@ -131,6 +131,15 @@ class DubbingService:
         """Lista los WAV de referencia (voces ES) disponibles en el backend."""
         return await self._get("/voices", timeout=5.0)
 
+    async def list_s2pro_models(self) -> dict[str, Any]:
+        """Proxy a ``GET /s2pro/models`` del dubbing-generator.
+
+        El bind-mount ``/models/s2pro`` solo está montado en el
+        contenedor dubbing, así que este servicio reenvía la consulta y
+        devuelve la lista al frontend.
+        """
+        return await self._get("/s2pro/models", timeout=5.0)
+
     async def save_voice_transcript(
         self, filename: str, body: VoiceTranscriptBody
     ) -> dict[str, Any]:

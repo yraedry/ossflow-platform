@@ -154,17 +154,35 @@ def test_s2_quantization_default_is_q6_k(env):
     assert r.json()["s2_quantization"] == "q6_k"
 
 
-def test_put_s2_quantization_accepts_valid_values(env):
-    for value in ("q4_k_m", "q6_k"):
+def test_put_s2_quantization_accepts_any_safe_identifier(env):
+    """Whitelist eliminada: cualquier identificador seguro vale.
+
+    La UI descubre los GGUF disponibles vía
+    ``GET /api/dubbing/s2pro/models`` leyendo el bind-mount del dubbing,
+    así que el backend solo valida que el valor sea utilizable como
+    nombre de fichero (sin path traversal).
+    """
+    for value in ("q4_k_m", "q6_k", "q8_0", "q5_k_m", "f16"):
         r = env["client"].put("/api/settings", json={"s2_quantization": value})
         assert r.status_code == 200
         assert r.json()["s2_quantization"] == value
 
 
-def test_put_s2_quantization_rejects_invalid(env):
-    r = env["client"].put("/api/settings", json={"s2_quantization": "q8_xxx"})
+def test_put_s2_quantization_normalizes_case(env):
+    r = env["client"].put("/api/settings", json={"s2_quantization": "Q4_K_M"})
+    assert r.status_code == 200
+    assert r.json()["s2_quantization"] == "q4_k_m"
+
+
+def test_put_s2_quantization_rejects_path_traversal(env):
+    for bad in ("", "  ", "../etc/passwd", "q4/k", "q4-k", "q4 k"):
+        r = env["client"].put("/api/settings", json={"s2_quantization": bad})
+        assert r.status_code == 422, f"unexpected accept for {bad!r}"
+
+
+def test_put_s2_quantization_rejects_non_string(env):
+    r = env["client"].put("/api/settings", json={"s2_quantization": 123})
     assert r.status_code == 422
-    assert "q4_k_m" in r.json()["error"]
 
 
 def test_legacy_tts_keys_removed_from_schema(env):

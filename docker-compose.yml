@@ -149,13 +149,15 @@ services:
       - XDG_CACHE_HOME=/models/cache
       - DUBBING_MODEL_VOICE_PATH=${DUBBING_MODEL_VOICE_PATH:-}
       # S2-Pro es el único motor TTS soportado tras T22.5 (eliminados
-      # ElevenLabs/Piper/Kokoro). La cuantización ahora se controla
-      # también desde la UI vía el setting ``s2_quantization`` (q4_k_m
-      # | q6_k); el path absoluto se construye en pipeline.py y se
-      # pasa al dubbing en el RunRequest. Este env var actúa como
-      # fallback inicial cuando aún no hay setting persistido en BD:
-      #   q4_k_m: ~3 GB VRAM, calidad menor, encaja en GPUs de 6 GB.
-      #   q6_k:   ~5 GB VRAM, mejor calidad, recomendada en ≥8 GB.
+      # ElevenLabs/Piper/Kokoro). La cuantización se controla desde la
+      # UI vía el setting ``s2_quantization``: el frontend descubre los
+      # GGUF disponibles llamando a ``GET /api/dubbing/s2pro/models``,
+      # que escanea este bind-mount en caliente. Para añadir variantes
+      # basta con dejar un fichero ``s2-pro-<quant>.gguf`` en la carpeta
+      # del host (``S2PRO_MODEL_DIR``) y recargar la UI.
+      # El env var de abajo actúa solo como fallback inicial cuando aún
+      # no hay setting persistido en BD; en runtime el path real se
+      # construye en pipeline.py como ``/models/s2pro/s2-pro-{quant}.gguf``.
       - S2PRO_GGUF_PATH=${S2PRO_GGUF_PATH:-/models/s2pro/s2-pro-q6_k.gguf}
       - S2PRO_TOKENIZER_PATH=${S2PRO_TOKENIZER_PATH:-/models/s2pro/tokenizer.json}
     networks:

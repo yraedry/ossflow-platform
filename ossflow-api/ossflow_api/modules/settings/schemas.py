@@ -60,11 +60,14 @@ DEFAULTS: dict[str, Any] = {
     "s2_top_p": 0.8,
     "s2_top_k": 30,
     "s2_max_tokens": 1024,
-    # Cuantización del modelo GGUF S2-Pro:
-    #   q4_k_m: ~3 GB VRAM, calidad menor, encaja en GPUs de 6 GB.
-    #   q6_k:   ~5 GB VRAM, mejor calidad, recomendada en ≥8 GB.
-    # El path absoluto se construye en pipeline.py como
-    # /models/s2pro/s2-pro-{quant}.gguf antes de pasarlo al dubbing.
+    # Cuantización del modelo GGUF S2-Pro. La whitelist hardcoded
+    # (q4_k_m/q6_k) se eliminó: la UI descubre los GGUF disponibles
+    # vía GET /api/dubbing/s2pro/models, que escanea el bind-mount del
+    # dubbing en caliente. El default sigue siendo q6_k como fallback
+    # inicial cuando aún no hay setting persistido — si el fichero
+    # correspondiente no existe en disco, el operador lo cambiará desde
+    # la UI al ver la lista real. El path absoluto se construye en
+    # pipeline.py como /models/s2pro/s2-pro-{quant}.gguf.
     "s2_quantization": "q6_k",
     # OpenAI post-process for the English SRT produced by WhisperX.
     # Cleans syllable-duplication artifacts and broken mid-clause boundaries

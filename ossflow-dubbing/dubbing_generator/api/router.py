@@ -8,6 +8,7 @@ Endpoints:
 
 * ``POST /maintenance/restart``           — self-restart graceful.
 * ``GET  /s2pro/status``                  — estado del child process s2.cpp.
+* ``GET  /s2pro/models``                  — lista de GGUF S2-Pro disponibles en disco.
 * ``GET  /voices``                        — lista de voice profiles disponibles.
 * ``PUT  /voices/{filename}/transcript``  — guarda transcripción de referencia.
 * ``POST /analyze``                       — diagnóstico del pipeline para un vídeo.
@@ -16,6 +17,7 @@ Endpoints:
 from __future__ import annotations
 
 import os
+import re
 from pathlib import Path
 from typing import Optional
 
@@ -24,6 +26,8 @@ from pydantic import BaseModel
 
 
 VOICES_DIR = Path("/voices")
+S2PRO_MODELS_DIR = Path("/models/s2pro")
+S2PRO_GGUF_RE = re.compile(r"^s2-pro-(.+)\.gguf$", re.IGNORECASE)
 
 
 def _transcript_path_for(voice_path: Path) -> Path:
@@ -102,6 +106,48 @@ def register(app: FastAPI) -> None:
             "running": proc is not None and proc.poll() is None,
             "ready": manager.is_ready(),
             "engine": manager.cfg.tts_engine,
+        }
+
+    @app.get("/s2pro/models")
+    def s2pro_models() -> dict:
+        """Escanea ``/models/s2pro`` y devuelve los GGUF disponibles.
+
+        Permite que la UI rellene el desplegable de cuantización en
+        caliente: el operador deja un fichero ``s2-pro-<quant>.gguf`` en
+        el bind-mount del host y al recargar la página aparece sin
+        rebuild de imagen ni reinicio del contenedor.
+
+        Devuelve también el estado del ``tokenizer.json`` (sidecar
+        obligatorio para que el server s2.cpp arranque) para que la UI
+        muestre un warning si falta.
+        """
+        models: list[dict] = []
+        dir_exists = S2PRO_MODELS_DIR.exists()
+        if dir_exists:
+            for p in sorted(S2PRO_MODELS_DIR.iterdir()):
+                if not p.is_file():
+                    continue
+                match = S2PRO_GGUF_RE.match(p.name)
+                if not match:
+                    continue
+                try:
+                    size_bytes = p.stat().st_size
+                except OSError:
+                    continue
+                quant = match.group(1).lower()
+                models.append({
+                    "quant": quant,
+                    "filename": p.name,
+                    "size_bytes": size_bytes,
+                    "size_mb": round(size_bytes / (1024 * 1024), 1),
+                })
+        tokenizer_path = S2PRO_MODELS_DIR / "tokenizer.json"
+        return {
+            "models_dir": str(S2PRO_MODELS_DIR),
+            "dir_exists": dir_exists,
+            "models": models,
+            "tokenizer_present": tokenizer_path.is_file(),
+            "tokenizer_path": str(tokenizer_path),
         }
 
     @app.get("/voices")

@@ -62,6 +62,39 @@ def test_list_voices_proxies_to_backend() -> None:
 
 
 # ---------------------------------------------------------------------------
+# /s2pro/models — proxy del descubrimiento de GGUF en disco
+# ---------------------------------------------------------------------------
+
+
+@respx.mock
+def test_list_s2pro_models_proxies_to_backend() -> None:
+    payload = {
+        "models_dir": "/models/s2pro",
+        "dir_exists": True,
+        "models": [
+            {
+                "quant": "q4_k_m",
+                "filename": "s2-pro-q4_k_m.gguf",
+                "size_bytes": 3_600_000_000,
+                "size_mb": 3433.2,
+            },
+        ],
+        "tokenizer_present": True,
+        "tokenizer_path": "/models/s2pro/tokenizer.json",
+    }
+    route = respx.get(f"{FAKE_DUB}/s2pro/models").mock(
+        return_value=Response(200, json=payload)
+    )
+    client = _build_client()
+
+    r = client.get("/api/dubbing/s2pro/models")
+
+    assert r.status_code == 200
+    assert r.json() == payload
+    assert route.called
+
+
+# ---------------------------------------------------------------------------
 # /voices/{filename}/transcript
 # ---------------------------------------------------------------------------
 

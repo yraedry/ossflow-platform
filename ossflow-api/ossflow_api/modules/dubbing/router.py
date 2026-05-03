@@ -33,6 +33,22 @@ async def list_voices(
         raise _to_http(exc) from exc
 
 
+@router.get("/s2pro/models")
+async def list_s2pro_models(
+    svc: DubbingService = Depends(get_dubbing_service),
+) -> dict:
+    """Lista los GGUF S2-Pro disponibles en el bind-mount del dubbing.
+
+    Pensado para que la UI de settings rellene en caliente el desplegable
+    de cuantización: añadir un fichero al directorio del host y recargar
+    la página basta para verlo.
+    """
+    try:
+        return await svc.list_s2pro_models()
+    except ApiError as exc:
+        raise _to_http(exc) from exc
+
+
 @router.put("/voices/{filename}/transcript")
 async def save_voice_transcript(
     filename: str,

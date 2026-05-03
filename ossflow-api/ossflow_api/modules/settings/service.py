@@ -11,6 +11,7 @@ from __future__ import annotations
 import copy
 import json
 import logging
+import re
 from typing import Any, Optional
 
 from ossflow_service_kit.db import init_db, session_scope
@@ -315,9 +316,21 @@ class SettingsService:
 
         if "s2_quantization" in body:
             v = body["s2_quantization"]
-            if not isinstance(v, str) or v.strip().lower() not in ("q4_k_m", "q6_k"):
-                return "s2_quantization must be 'q4_k_m' or 'q6_k'", None
-            current["s2_quantization"] = v.strip().lower()
+            if not isinstance(v, str):
+                return "s2_quantization must be a string", None
+            normalized = v.strip().lower()
+            # La whitelist hardcoded (q4_k_m/q6_k) se eliminó: ahora la
+            # UI descubre los GGUF disponibles vía GET /api/dubbing/s2pro/models
+            # leyendo el bind-mount del dubbing. Aquí solo validamos que
+            # el valor sea un identificador seguro para usarlo como
+            # ``s2-pro-{quant}.gguf`` sin path traversal.
+            if not normalized or not re.fullmatch(r"[a-z0-9_]+", normalized):
+                return (
+                    "s2_quantization must be a non-empty identifier "
+                    "(lowercase alphanumeric + underscores)",
+                    None,
+                )
+            current["s2_quantization"] = normalized
 
         self.save(current)
         return None, current
