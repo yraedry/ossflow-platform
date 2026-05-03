@@ -80,6 +80,34 @@ def _should_keep_f16(name: str) -> bool:
     return any(p in name for p in KEEP_F16_PATTERNS)
 
 
+_INT_TYPES = {
+    gguf.GGUFValueType.UINT8, gguf.GGUFValueType.INT8,
+    gguf.GGUFValueType.UINT16, gguf.GGUFValueType.INT16,
+    gguf.GGUFValueType.UINT32, gguf.GGUFValueType.INT32,
+    gguf.GGUFValueType.UINT64, gguf.GGUFValueType.INT64,
+}
+_FLOAT_TYPES = {gguf.GGUFValueType.FLOAT32, gguf.GGUFValueType.FLOAT64}
+
+
+def _coerce_scalar(value, ftype: gguf.GGUFValueType):
+    """Convierte un escalar (numpy o python) al tipo Python que `struct.pack` espera.
+
+    `field.parts[idx]` viene como numpy scalar; `.tolist()` lo pasa a
+    int/float/bool nativo. Pero algunos enteros se quedan como float si
+    el dtype subyacente es float64 (raro, pero ocurre con campos
+    `general.alignment` o ciertos legacy GGUF) — y `struct.pack('I', val)`
+    rechaza floats. Forzamos el tipo según lo que dice el field type.
+    """
+    raw = value.tolist() if hasattr(value, "tolist") else value
+    if ftype in _INT_TYPES:
+        return int(raw)
+    if ftype in _FLOAT_TYPES:
+        return float(raw)
+    if ftype == gguf.GGUFValueType.BOOL:
+        return bool(raw)
+    return raw
+
+
 def _copy_kv(reader: gguf.GGUFReader, writer: gguf.GGUFWriter,
              skip_keys: set[str]) -> None:
     """Copia todos los KV pairs del reader al writer salvo los excluidos."""
@@ -98,12 +126,10 @@ def _copy_kv(reader: gguf.GGUFReader, writer: gguf.GGUFWriter,
                 if sub_type == gguf.GGUFValueType.STRING:
                     values.append(bytes(part).decode("utf-8"))
                 else:
-                    values.append(part.tolist() if hasattr(part, "tolist") else part)
+                    values.append(_coerce_scalar(part, sub_type))
             writer.add_array(field.name, values)
         else:
-            value = field.parts[field.data[0]]
-            if hasattr(value, "tolist"):
-                value = value.tolist()
+            value = _coerce_scalar(field.parts[field.data[0]], ftype)
             writer.add_key_value(field.name, value, ftype)
 
 
