@@ -20,23 +20,7 @@ ENV DEBIAN_FRONTEND=noninteractive
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
         build-essential cmake git ca-certificates pkg-config \
-        wget gnupg \
- && rm -rf /var/lib/apt/lists/*
-
-# Ubuntu 22.04 ships libvulkan-dev 1.3.204 (Feb 2022). ggml's Vulkan
-# backend (in s2.cpp@e48ce8e) requires symbols introduced in Vulkan
-# 1.3.275+ (PipelineRobustnessFeaturesEXT, LayerSettingsCreateInfoEXT,
-# CooperativeMatrixFeaturesKHR, DriverID::eMesaDozen). LunarG publishes
-# an apt repo for jammy with the current Vulkan SDK; install that
-# instead of the distro headers. The runtime image still uses Ubuntu
-# 22.04's libvulkan1 (the loader is ABI-stable; only headers + SPIR-V
-# tooling need to be modern at build time).
-RUN wget -qO- https://packages.lunarg.com/lunarg-signing-key-pub.asc \
-        | gpg --dearmor -o /usr/share/keyrings/lunarg.gpg \
- && echo "deb [signed-by=/usr/share/keyrings/lunarg.gpg] https://packages.lunarg.com/vulkan jammy main" \
-        > /etc/apt/sources.list.d/lunarg-vulkan-jammy.list \
- && apt-get update && apt-get install -y --no-install-recommends \
-        vulkan-sdk \
+        libvulkan-dev glslang-tools glslang-dev spirv-tools \
  && rm -rf /var/lib/apt/lists/*
 
 RUN git clone --recurse-submodules ${S2CPP_REPO} /src/s2.cpp \
