@@ -55,30 +55,16 @@ RUN cmake -B build \
 # ----- Stage 2: dubbing-generator runtime -------------------------------
 FROM ossflow-base:latest
 
-# Vulkan runtime. IMPORTANT: el loader (``libvulkan1``) debe ser
-# moderno (>=1.3.275). Originalmente intentamos usar el de Ubuntu 22.04
-# jammy (1.3.204, Feb 2022) bajo la teoría de que el loader es
-# ABI-estable, pero NVIDIA driver 590.48.01 declara su ICD como Vulkan
-# 1.4.325; un loader 1.3.x rechaza el ICD entero con
-# ``Could not get 'vkCreateInstance' via 'vk_icdGetInstanceProcAddr'``
-# y el contenedor cae a llvmpipe (CPU). Instalamos el loader moderno
-# desde el repo apt de LunarG (mismo que el builder) para mantener
-# paridad de versión y evitar el mismatch.
-#
-# ``mesa-vulkan-drivers`` aporta lavapipe como ICD CPU fallback (útil
-# en CI/tests sin GPU). El ICD real de NVIDIA lo inyecta
-# nvidia-container-toolkit en runtime cuando el servicio arranca con
-# NVIDIA_DRIVER_CAPABILITIES incluyendo ``graphics`` y runtime nvidia
-# (ver compose). ``vulkan-tools`` aporta ``vulkaninfo`` para debug.
+# Vulkan runtime: libvulkan1 is the loader; mesa-vulkan-drivers ships
+# fallback ICDs (lavapipe) used when no GPU is visible (CI/tests). The
+# real NVIDIA Vulkan ICD is injected at container start by
+# nvidia-container-toolkit when the service is launched with
+# NVIDIA_DRIVER_CAPABILITIES including `graphics` (see compose).
+# vulkan-tools provides `vulkaninfo` for runtime debugging.
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     --mount=type=cache,target=/var/lib/apt,sharing=locked \
     apt-get update && apt-get install -y --no-install-recommends \
-        rubberband-cli wget espeak-ng gnupg ca-certificates \
- && wget -qO- https://packages.lunarg.com/lunarg-signing-key-pub.asc \
-        | gpg --dearmor -o /usr/share/keyrings/lunarg.gpg \
- && echo "deb [signed-by=/usr/share/keyrings/lunarg.gpg] https://packages.lunarg.com/vulkan jammy main" \
-        > /etc/apt/sources.list.d/lunarg-vulkan-jammy.list \
- && apt-get update && apt-get install -y --no-install-recommends \
+        rubberband-cli wget espeak-ng \
         libvulkan1 mesa-vulkan-drivers vulkan-tools \
  && rm -rf /var/lib/apt/lists/*
 
