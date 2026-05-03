@@ -24,6 +24,34 @@ docker run --rm -it \
     -v "$VOICE_WAV:/work/ref.wav:ro" \
     nvidia/cuda:12.4.1-runtime-ubuntu22.04 bash -c '
 set -euo pipefail
+
+# Asume que /work/fish-speech YA está cacheado del smoke_test previo
+# (mismo bind-mount). Si no está, lo clonamos. Igual con deps Python:
+# si torch no está importable, instalamos todo. Detectamos vía rc.
+export DEBIAN_FRONTEND=noninteractive
+if ! command -v python3 >/dev/null 2>&1 || ! command -v pip3 >/dev/null 2>&1; then
+    apt-get update -qq
+    apt-get install -y --no-install-recommends -qq \
+        python3 python3-dev python3-pip git ffmpeg \
+        build-essential portaudio19-dev libsndfile1 \
+        > /dev/null 2>&1
+    ln -sf /usr/bin/python3 /usr/local/bin/python
+    ln -sf /usr/bin/pip3 /usr/local/bin/pip
+fi
+# Si fish_speech no es importable, asumimos que el smoke nunca lo dejó
+# instalado y lo metemos ahora (pip cache lo agiliza).
+if ! python -c "import fish_speech" 2>/dev/null; then
+    echo "--- installing torch + fish-speech (first time, ~5min) ---"
+    if [ ! -d /work/fish-speech/.git ]; then
+        git clone --depth 50 https://github.com/fishaudio/fish-speech.git /work/fish-speech
+    fi
+    cd /work/fish-speech
+    pip install --no-cache-dir torch==2.6.0 torchaudio==2.6.0 \
+        --index-url https://download.pytorch.org/whl/cu124 > /tmp/pip.log 2>&1 \
+      || { echo "FAIL torch"; tail -30 /tmp/pip.log; exit 1; }
+    pip install --no-cache-dir -e . > /tmp/pip.log 2>&1 \
+      || { echo "FAIL fish-speech"; tail -30 /tmp/pip.log; exit 1; }
+fi
 cd /work/fish-speech
 
 # py-spy para profile en vivo
