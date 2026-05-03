@@ -17,6 +17,7 @@ mkdir -p "$PIP_CACHE_DIR_HOST" "$FISH_REPO_DIR_HOST"
 docker run --rm -it \
     --runtime=nvidia \
     --gpus all \
+    --cap-add=SYS_PTRACE \
     -e NVIDIA_DRIVER_CAPABILITIES=compute,utility \
     -v "$MODELS_DIR:/root/.cache/huggingface" \
     -v "$PIP_CACHE_DIR_HOST:/root/.cache/pip" \
@@ -139,13 +140,33 @@ print(f\"moved in {time.time()-t0:.1f}s\", flush=True)
 print(f\"VRAM: {torch.cuda.memory_allocated()/1e9:.2f} GB\", flush=True)
 " 2>&1 &
 PYPID=$!
-echo "Python PID: $PYPID"
-sleep 60
+START=$(date +%s)
+echo "Python PID: $PYPID (start t=${START})"
+
+# Dumps escalonados durante la carga (60s, 120s, 240s). Cada uno
+# duerme hasta el momento absoluto y dumpea solo si el proceso
+# sigue vivo. Se salta los pendientes si python ya acabó.
+PREV=0
+for dump_at in 60 120 240; do
+    delta=$((dump_at - PREV))
+    PREV=$dump_at
+    sleep $delta
+    if ! kill -0 $PYPID 2>/dev/null; then
+        echo "(python ended before t=${dump_at}s)"
+        break
+    fi
+    echo
+    echo "--- py-spy dump at t=${dump_at}s ---"
+    py-spy dump --pid $PYPID 2>&1 | head -50 || echo "(py-spy failed)"
+done
+
 echo
-echo "--- py-spy dump after 60s ---"
-py-spy dump --pid $PYPID 2>&1 | head -40 || echo "(py-spy failed; process may have ended)"
-echo
-echo "--- waiting for python to finish or 60s more ---"
-( sleep 60; kill $PYPID 2>/dev/null ) &
+echo "--- waiting for python to finish (max 10 min total) ---"
+# Si todavía vivo, watchdog que mata a los 10 min totales.
+ELAPSED=$(( $(date +%s) - START ))
+REMAIN=$(( 600 - ELAPSED ))
+if [ $REMAIN -lt 1 ]; then REMAIN=1; fi
+( sleep $REMAIN; kill $PYPID 2>/dev/null && echo "[watchdog] killed PID after 10 min" ) &
 wait $PYPID 2>/dev/null || true
+echo "(python exited at t=$(( $(date +%s) - START ))s)"
 '
