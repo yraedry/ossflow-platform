@@ -28,7 +28,16 @@ set -euo pipefail
 
 FISH_REF="${FISH_REF:-main}"
 VOICES_DIR="${VOICES_DIR:-/opt/ossflow/ossflow-platform/ossflow-dubbing/voices}"
-VOICE_WAV="${VOICE_WAV:-${VOICES_DIR}/craig_10s.wav}"
+VOICE_WAV="${VOICE_WAV:-${VOICES_DIR}/craig_16s.wav}"
+# Si no se pasa VOICE_TXT, intentamos leer el sidecar .txt con el mismo
+# stem que el WAV (la convención del propio dubbing-generator —
+# `_transcript_path_for` en api/router.py).
+if [ -z "${VOICE_TXT:-}" ]; then
+    SIDECAR="${VOICE_WAV%.*}.txt"
+    if [ -f "$SIDECAR" ]; then
+        VOICE_TXT="$(cat "$SIDECAR")"
+    fi
+fi
 VOICE_TXT="${VOICE_TXT:-}"
 TEST_TEXT="${TEST_TEXT:-Cuando encuentres un problema al intentarlo en el entrenamiento, vuelve directamente a la posición anterior.}"
 MODELS_DIR="${MODELS_DIR:-/opt/ossflow/ossflow-platform/models/fish-speech-cache}"
