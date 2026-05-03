@@ -107,11 +107,14 @@ set -euo pipefail
 echo "--- Stage 1: deps ---"
 export DEBIAN_FRONTEND=noninteractive
 apt-get update -qq
+# python3.10 viene en la imagen base; incluimos -dev por pyaudio (que
+# necesita Python.h durante el build de su extensión C). portaudio19
+# y libsndfile1 son las nativas.
 apt-get install -y --no-install-recommends -qq \
-    python3.11 python3.11-venv python3-pip git ffmpeg \
+    python3 python3-dev python3-pip python3-venv git ffmpeg \
     build-essential portaudio19-dev libsndfile1 \
     > /dev/null 2>&1
-update-alternatives --install /usr/bin/python python /usr/bin/python3.11 1 > /dev/null
+ln -sf /usr/bin/python3 /usr/local/bin/python
 
 echo "--- Stage 2: clone fish-speech @ $FISH_REF ---"
 git clone --depth 50 https://github.com/fishaudio/fish-speech.git /work/fish-speech
