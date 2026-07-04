@@ -255,6 +255,64 @@ def run_scrape(req: RunScrapeRequest) -> dict[str, str]:
     return {"job_id": job_id}
 
 
+# ---------------------------------------------------------------------------
+# /run-oracle: split by oracle data stored in .bjj-meta.json sidecar
+# ---------------------------------------------------------------------------
+# El orquestador (backend_dispatch.py) llama POST /run-oracle con
+# {"path": ..., "oracle": {...}, "output_dir": ...}.
+# El oracle block es equivalente a ScrapeResult: lo validamos con el
+# mismo modelo y delegamos al ChapterSplitter.
+
+class RunOracleRequest(BaseModel):
+    path: str
+    oracle: dict[str, Any]
+    output_dir: str | None = None
+
+
+@app.post("/run-oracle")
+def run_oracle(req: RunOracleRequest) -> dict[str, str]:
+    """Submit an oracle-driven split job. Uses scraped timestamps from sidecar."""
+    log = logging.getLogger(__name__)
+    log.info("run-oracle request: path=%s, output_dir=%s", req.path, req.output_dir)
+    if not req.path:
+        raise HTTPException(status_code=400, detail="path is required")
+    p = Path(req.path)
+    if not p.is_absolute():
+        raise HTTPException(status_code=400, detail="path must be absolute")
+    if ".." in p.parts:
+        raise HTTPException(status_code=400, detail="path traversal not allowed")
+
+    registry = app.state.runner.registry
+    job_id, q = registry.create()
+
+    import threading
+
+    def emit(evt: JobEvent) -> None:
+        q.put(evt)
+
+    def target() -> None:
+        try:
+            _run_scrape_task(
+                RunScrapeRequest(
+                    path=req.path,
+                    scrape_data=req.oracle,
+                    output_dir=req.output_dir,
+                ),
+                emit,
+            )
+            emit(JobEvent(type="done", data={"job_id": job_id}))
+        except Exception as exc:  # noqa: BLE001
+            log.exception("oracle job %s failed", job_id)
+            emit(JobEvent(type="error", data={"message": str(exc)}))
+        finally:
+            q.close()
+
+    threading.Thread(
+        target=target, daemon=True, name=f"oracle-job-{job_id}",
+    ).start()
+    return {"job_id": job_id}
+
+
 if __name__ == "__main__":
     import uvicorn
 

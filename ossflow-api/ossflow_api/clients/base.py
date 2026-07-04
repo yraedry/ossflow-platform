@@ -18,12 +18,11 @@ log = logging.getLogger(__name__)
 
 RUN_TIMEOUT = 10.0
 STREAM_RECONNECT_DELAY = 2.0
-# SSE streams: el backend envía heartbeat cada ~15 s. Si pasan 120 s
-# sin ningún dato el backend está colgado → reconectamos. connect/write
-# son rápidos (<10 s). pool es el slot del connection pool; alto para
-# no bloquear.
+# SSE streams: el backend envía heartbeat cada ~15 s pero entre batches
+# de GPU (WhisperX, S2-Pro) puede haber silencio de varios minutos.
+# 600 s (10 min) cubre los peores casos sin que httpx lo considere colgado.
 _STREAM_TIMEOUT = httpx.Timeout(
-    connect=10.0, read=120.0, write=10.0, pool=30.0,
+    connect=10.0, read=600.0, write=10.0, pool=30.0,
 )
 
 
@@ -66,7 +65,7 @@ class BackendClient:
             return job_id
 
     async def stream(
-        self, job_id: str, *, max_reconnects: int = 3
+        self, job_id: str, *, max_reconnects: int = 10
     ) -> AsyncIterator[NormalizedEvent]:
         """Stream SSE events de /events/{job_id}, yield NormalizedEvent.
 
